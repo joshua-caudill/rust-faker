@@ -103,6 +103,95 @@ fn to_mixed_case(name: &str) -> String {
     }).collect()
 }
 
+fn apply_name_variance(mut name: Name) -> Name {
+    let mut rng = rand::thread_rng();
+
+    // Apply 1-3 random variance patterns
+    let num_variances = rng.gen_range(1..=3);
+
+    for _ in 0..num_variances {
+        let variance_type = rng.gen_range(0..15);
+
+        match variance_type {
+            0 => {
+                // Swap first and last names
+                std::mem::swap(&mut name.first_name, &mut name.last_name);
+            },
+            1 => {
+                // First and last combined in first name
+                name.first_name = format!("{} {}", name.first_name, name.last_name);
+                name.last_name = String::new();
+            },
+            2 => {
+                // "LastName, FirstName" format in first name
+                name.first_name = format!("{}, {}", name.last_name, name.first_name);
+                name.last_name = String::new();
+            },
+            3 => {
+                // Full name in one field
+                name.first_name = format!("{} {} {}", name.first_name, name.middle_name, name.last_name);
+                name.middle_name = String::new();
+                name.last_name = String::new();
+            },
+            4 => {
+                // Hyphenated last name
+                let extra_last: String = LastName().fake();
+                name.last_name = format!("{}-{}", name.last_name, extra_last);
+            },
+            5 => {
+                // Hyphenated first name
+                let extra_first: String = FirstName().fake();
+                name.first_name = format!("{}-{}", name.first_name, extra_first);
+            },
+            6 => {
+                // Multiple last names
+                let extra_last: String = LastName().fake();
+                name.last_name = format!("{} {}", name.last_name, extra_last);
+            },
+            7 => {
+                // Add prefix to first name
+                name.first_name = format!("{} {}", get_random_prefix(), name.first_name);
+            },
+            8 => {
+                // Add suffix to last name
+                name.last_name = format!("{} {}", name.last_name, get_random_suffix());
+            },
+            9 => {
+                // Nickname in quotes
+                name.first_name = format!("\"{}\"", name.first_name);
+            },
+            10 => {
+                // Nickname in parentheses
+                name.first_name = format!("{} ({})", name.first_name, &name.first_name[..3.min(name.first_name.len())]);
+            },
+            11 => {
+                // All caps
+                name.first_name = name.first_name.to_uppercase();
+                name.last_name = name.last_name.to_uppercase();
+            },
+            12 => {
+                // All lowercase
+                name.first_name = name.first_name.to_lowercase();
+                name.last_name = name.last_name.to_lowercase();
+            },
+            13 => {
+                // Mixed case
+                name.first_name = to_mixed_case(&name.first_name);
+            },
+            _ => {
+                // Add typo
+                if rng.gen_bool(0.5) {
+                    name.first_name = add_typo(&name.first_name);
+                } else {
+                    name.last_name = add_typo(&name.last_name);
+                }
+            }
+        }
+    }
+
+    name
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -180,5 +269,21 @@ mod tests {
 
         // Test with all uppercase
         assert_eq!(to_mixed_case("HELLO"), "HeLlO");
+    }
+
+    #[test]
+    fn test_apply_name_variance() {
+        let clean = Name::new(
+            "Joshua".to_string(),
+            "Allen".to_string(),
+            "Caudill".to_string(),
+        );
+
+        // Apply variance and verify it doesn't panic
+        let varied = apply_name_variance(clean);
+        // At least one field should have content
+        assert!(!varied.first_name.is_empty() ||
+                !varied.middle_name.is_empty() ||
+                !varied.last_name.is_empty());
     }
 }
