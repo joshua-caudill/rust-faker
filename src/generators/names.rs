@@ -1,5 +1,5 @@
-use fake::Fake;
 use fake::faker::name::en::*;
+use fake::Fake;
 use rand::Rng;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -11,7 +11,11 @@ pub struct Name {
 
 impl Name {
     pub fn new(first_name: String, middle_name: String, last_name: String) -> Self {
-        Self { first_name, middle_name, last_name }
+        Self {
+            first_name,
+            middle_name,
+            last_name,
+        }
     }
 
     pub fn to_record(&self) -> Vec<String> {
@@ -82,13 +86,13 @@ pub fn generate_names(count: usize, error_rate: f64) -> Vec<Name> {
 
 fn get_random_prefix() -> String {
     let mut rng = rand::thread_rng();
-    let prefixes = vec!["Dr.", "Mr.", "Mrs.", "Ms.", "Prof.", "Rev."];
+    let prefixes = ["Dr.", "Mr.", "Mrs.", "Ms.", "Prof.", "Rev."];
     prefixes[rng.gen_range(0..prefixes.len())].to_string()
 }
 
 fn get_random_suffix() -> String {
     let mut rng = rand::thread_rng();
-    let suffixes = vec!["Jr.", "Sr.", "II", "III", "IV", "MD", "PhD", "Esq."];
+    let suffixes = ["Jr.", "Sr.", "II", "III", "IV", "MD", "PhD", "Esq."];
     suffixes[rng.gen_range(0..suffixes.len())].to_string()
 }
 
@@ -118,14 +122,14 @@ fn add_typo(name: &str) -> String {
             // Double a letter
             let pos = rng.gen_range(0..chars.len());
             chars.insert(pos, chars[pos]);
-        },
+        }
         1 => {
             // Transpose two letters
             if chars.len() >= 2 {
-                let pos = rng.gen_range(0..chars.len()-1);
+                let pos = rng.gen_range(0..chars.len() - 1);
                 chars.swap(pos, pos + 1);
             }
-        },
+        }
         _ => {
             // Remove a letter (but keep at least one)
             if chars.len() > 1 {
@@ -143,13 +147,16 @@ fn add_typo(name: &str) -> String {
 /// Characters at even indices are uppercased, odd indices are lowercased.
 /// Used for testing case-insensitive matching in standardization systems.
 fn to_mixed_case(name: &str) -> String {
-    name.chars().enumerate().map(|(i, c)| {
-        if i % 2 == 0 {
-            c.to_uppercase().to_string()
-        } else {
-            c.to_lowercase().to_string()
-        }
-    }).collect()
+    name.chars()
+        .enumerate()
+        .map(|(i, c)| {
+            if i % 2 == 0 {
+                c.to_uppercase().to_string()
+            } else {
+                c.to_lowercase().to_string()
+            }
+        })
+        .collect()
 }
 
 /// Applies 1-3 random variance patterns to a Name.
@@ -176,76 +183,83 @@ fn apply_name_variance(mut name: Name) -> Name {
             0 => {
                 // Swap first and last names
                 std::mem::swap(&mut name.first_name, &mut name.last_name);
-            },
+            }
             1 => {
                 // First and last combined in first name
                 name.first_name = format!("{} {}", name.first_name, name.last_name);
                 name.last_name = String::new();
-            },
+            }
             2 => {
                 // "LastName, FirstName" format in first name
                 name.first_name = format!("{}, {}", name.last_name, name.first_name);
                 name.last_name = String::new();
-            },
+            }
             3 => {
                 // Full name in one field
-                name.first_name = format!("{} {} {}", name.first_name, name.middle_name, name.last_name);
+                name.first_name = format!(
+                    "{} {} {}",
+                    name.first_name, name.middle_name, name.last_name
+                );
                 name.middle_name = String::new();
                 name.last_name = String::new();
-            },
+            }
             4 => {
                 // Hyphenated last name
                 let extra_last: String = LastName().fake();
                 name.last_name = format!("{}-{}", name.last_name, extra_last);
-            },
+            }
             5 => {
                 // Hyphenated first name
                 let extra_first: String = FirstName().fake();
                 name.first_name = format!("{}-{}", name.first_name, extra_first);
-            },
+            }
             6 => {
                 // Multiple last names
                 let extra_last: String = LastName().fake();
                 name.last_name = format!("{} {}", name.last_name, extra_last);
-            },
+            }
             7 => {
                 // Add prefix to first name
                 name.first_name = format!("{} {}", get_random_prefix(), name.first_name);
-            },
+            }
             8 => {
                 // Add suffix to last name
                 if !name.last_name.is_empty() {
                     name.last_name = format!("{} {}", name.last_name, get_random_suffix());
                 }
-            },
+            }
             9 => {
                 // Nickname in quotes
                 name.first_name = format!("\"{}\"", name.first_name);
-            },
+            }
             10 => {
                 // Nickname in parentheses
                 if !name.first_name.is_empty() {
-                    name.first_name = format!("{} ({})", name.first_name, &name.first_name[..3.min(name.first_name.len())]);
+                    name.first_name = format!(
+                        "{} ({})",
+                        name.first_name,
+                        &name.first_name[..3.min(name.first_name.len())]
+                    );
                 }
-            },
+            }
             11 => {
                 // All caps
                 name.first_name = name.first_name.to_uppercase();
                 name.middle_name = name.middle_name.to_uppercase();
                 name.last_name = name.last_name.to_uppercase();
-            },
+            }
             12 => {
                 // All lowercase
                 name.first_name = name.first_name.to_lowercase();
                 name.middle_name = name.middle_name.to_lowercase();
                 name.last_name = name.last_name.to_lowercase();
-            },
+            }
             13 => {
                 // Mixed case
                 name.first_name = to_mixed_case(&name.first_name);
                 name.middle_name = to_mixed_case(&name.middle_name);
                 name.last_name = to_mixed_case(&name.last_name);
-            },
+            }
             _ => {
                 // Add typo
                 if rng.gen_bool(0.5) {
@@ -278,11 +292,7 @@ mod tests {
 
     #[test]
     fn test_name_creation_no_middle() {
-        let name = Name::new(
-            "Joshua".to_string(),
-            String::new(),
-            "Caudill".to_string(),
-        );
+        let name = Name::new("Joshua".to_string(), String::new(), "Caudill".to_string());
         assert_eq!(name.first_name, "Joshua");
         assert_eq!(name.middle_name, "");
         assert_eq!(name.last_name, "Caudill");
@@ -361,9 +371,11 @@ mod tests {
         // Apply variance and verify it doesn't panic
         let varied = apply_name_variance(clean);
         // At least one field should have content
-        assert!(!varied.first_name.is_empty() ||
-                !varied.middle_name.is_empty() ||
-                !varied.last_name.is_empty());
+        assert!(
+            !varied.first_name.is_empty()
+                || !varied.middle_name.is_empty()
+                || !varied.last_name.is_empty()
+        );
     }
 
     #[test]

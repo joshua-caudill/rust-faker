@@ -60,7 +60,7 @@ fn validate_inputs(count: usize, error_rate: f64) -> Result<(), String> {
     if count == 0 {
         return Err("Count must be greater than 0".to_string());
     }
-    if error_rate < 0.0 || error_rate > 1.0 {
+    if !(0.0..=1.0).contains(&error_rate) {
         return Err("Error rate must be between 0.0 and 1.0".to_string());
     }
     Ok(())
@@ -70,7 +70,12 @@ fn main() {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Addresses { count, output, error_rate, quiet } => {
+        Commands::Addresses {
+            count,
+            output,
+            error_rate,
+            quiet,
+        } => {
             if let Err(e) = validate_inputs(count, error_rate) {
                 eprintln!("Error: {}", e);
                 process::exit(1);
@@ -87,7 +92,12 @@ fn main() {
                 println!("Successfully generated {} addresses to {}", count, output);
             }
         }
-        Commands::Names { count, output, error_rate, quiet } => {
+        Commands::Names {
+            count,
+            output,
+            error_rate,
+            quiet,
+        } => {
             if let Err(e) = validate_inputs(count, error_rate) {
                 eprintln!("Error: {}", e);
                 process::exit(1);

@@ -1,5 +1,5 @@
-use fake::Fake;
 use fake::faker::address::en::*;
+use fake::Fake;
 use rand::Rng;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -12,8 +12,20 @@ pub struct Address {
 }
 
 impl Address {
-    pub fn new(address1: String, address2: String, city: String, state: String, zip: String) -> Self {
-        Self { address1, address2, city, state, zip }
+    pub fn new(
+        address1: String,
+        address2: String,
+        city: String,
+        state: String,
+        zip: String,
+    ) -> Self {
+        Self {
+            address1,
+            address2,
+            city,
+            state,
+            zip,
+        }
     }
 
     pub fn to_record(&self) -> Vec<String> {
@@ -107,14 +119,15 @@ fn abbreviate_street_suffix(suffix: &str) -> String {
         "Trail" => "Trl",
         "Terrace" => "Ter",
         _ => suffix,
-    }.to_string()
+    }
+    .to_string()
 }
 
 fn generate_po_box() -> String {
     let mut rng = rand::thread_rng();
     let box_number: u32 = (1..9999).fake();
 
-    let formats = vec![
+    let formats = [
         format!("PO Box {}", box_number),
         format!("P.O. Box {}", box_number),
         format!("POB {}", box_number),
@@ -125,7 +138,8 @@ fn generate_po_box() -> String {
 
 fn generate_apartment() -> String {
     let mut rng = rand::thread_rng();
-    let unit: String = format!("{}{}",
+    let unit: String = format!(
+        "{}{}",
         rng.gen_range(1..999),
         if rng.gen_bool(0.3) {
             ['A', 'B', 'C', 'D'][rng.gen_range(0..4)].to_string()
@@ -134,7 +148,7 @@ fn generate_apartment() -> String {
         }
     );
 
-    let formats = vec![
+    let formats = [
         format!("Apt {}", unit),
         format!("Apartment {}", unit),
         format!("#{}", unit),
@@ -162,53 +176,62 @@ fn apply_address_variance(mut address: Address) -> Address {
                 let parts: Vec<&str> = address.address1.split_whitespace().collect();
                 if let Some(&last) = parts.last() {
                     let abbreviated = abbreviate_street_suffix(last);
-                    let mut new_parts = parts[..parts.len()-1].to_vec();
+                    let mut new_parts = parts[..parts.len() - 1].to_vec();
                     new_parts.push(&abbreviated);
                     address.address1 = new_parts.join(" ");
                 }
-            },
+            }
             1 => {
                 // Replace with PO Box
                 address.address1 = generate_po_box();
                 address.address2 = String::new();
-            },
+            }
             2 => {
                 // Add apartment/unit
                 address.address2 = generate_apartment();
-            },
+            }
             3 => {
                 // Remove state
                 address.state = String::new();
-            },
+            }
             4 => {
                 // Remove zip
                 address.zip = String::new();
-            },
+            }
             5 => {
                 // Remove city
                 address.city = String::new();
-            },
+            }
             6 => {
                 // All caps
                 address.address1 = address.address1.to_uppercase();
                 address.city = address.city.to_uppercase();
-            },
+            }
             7 => {
                 // Add extra spaces
                 address.address1 = address.address1.replace(" ", "  ");
-            },
+            }
             8 => {
                 // Add periods inconsistently
                 if rng.gen_bool(0.5) {
                     address.address1 = address.address1.replace("St", "St.");
                     address.address1 = address.address1.replace("Ave", "Ave.");
                 }
-            },
+            }
             _ => {
                 // Mixed case
-                address.city = address.city.chars().enumerate().map(|(i, c)| {
-                    if i % 2 == 0 { c.to_uppercase().to_string() } else { c.to_lowercase().to_string() }
-                }).collect();
+                address.city = address
+                    .city
+                    .chars()
+                    .enumerate()
+                    .map(|(i, c)| {
+                        if i % 2 == 0 {
+                            c.to_uppercase().to_string()
+                        } else {
+                            c.to_lowercase().to_string()
+                        }
+                    })
+                    .collect();
             }
         }
     }
@@ -246,7 +269,10 @@ mod tests {
             "62701".to_string(),
         );
         let record = addr.to_record();
-        assert_eq!(record, vec!["123 Main St", "Apt 4B", "Springfield", "IL", "62701"]);
+        assert_eq!(
+            record,
+            vec!["123 Main St", "Apt 4B", "Springfield", "IL", "62701"]
+        );
     }
 
     #[test]
@@ -292,8 +318,13 @@ mod tests {
     #[test]
     fn test_generate_apartment() {
         let apt = generate_apartment();
-        assert!(apt.contains("Apt") || apt.contains("Unit") || apt.contains("#") ||
-                apt.contains("Suite") || apt.contains("Ste"));
+        assert!(
+            apt.contains("Apt")
+                || apt.contains("Unit")
+                || apt.contains("#")
+                || apt.contains("Suite")
+                || apt.contains("Ste")
+        );
     }
 
     #[test]

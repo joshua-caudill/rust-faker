@@ -1,6 +1,4 @@
-use csv::Writer;
 use indicatif::{ProgressBar, ProgressStyle};
-use std::fs::File;
 use std::io;
 use std::path::Path;
 
@@ -25,7 +23,7 @@ impl CsvWriter {
                 ProgressStyle::default_bar()
                     .template("{msg} [{bar:40.cyan/blue}] {percent}% ({pos}/{len})")
                     .expect("Invalid progress bar template")
-                    .progress_chars("=>-")
+                    .progress_chars("=>-"),
             );
             pb.set_message(message.to_string());
             pb
@@ -44,14 +42,14 @@ impl CsvWriter {
         let mut writer = builder.from_path(path)?;
 
         // Write header
-        writer.write_record(&["Address1", "Address2", "City", "State", "Zip"])?;
+        writer.write_record(["Address1", "Address2", "City", "State", "Zip"])?;
 
         // Create progress bar
         let pb = self.create_progress_bar(addresses.len(), "Generating addresses");
 
         // Write records
         for address in addresses {
-            writer.write_record(&address.to_record())?;
+            writer.write_record(address.to_record())?;
             pb.inc(1);
         }
 
@@ -73,14 +71,14 @@ impl CsvWriter {
         let mut writer = builder.from_path(path)?;
 
         // Write header
-        writer.write_record(&["FirstName", "MiddleName", "LastName"])?;
+        writer.write_record(["FirstName", "MiddleName", "LastName"])?;
 
         // Create progress bar
         let pb = self.create_progress_bar(names.len(), "Generating names");
 
         // Write records
         for name in names {
-            writer.write_record(&name.to_record())?;
+            writer.write_record(name.to_record())?;
             pb.inc(1);
         }
 
@@ -117,8 +115,8 @@ mod tests {
 
     #[test]
     fn test_write_addresses() {
-        use tempfile::NamedTempFile;
         use std::io::Read;
+        use tempfile::NamedTempFile;
 
         let temp_file = NamedTempFile::new().unwrap();
         let path = temp_file.path().to_str().unwrap();
@@ -155,8 +153,8 @@ mod tests {
 
     #[test]
     fn test_write_names() {
-        use tempfile::NamedTempFile;
         use std::io::Read;
+        use tempfile::NamedTempFile;
 
         let temp_file = NamedTempFile::new().unwrap();
         let path = temp_file.path().to_str().unwrap();
@@ -167,11 +165,7 @@ mod tests {
                 "Allen".to_string(),
                 "Caudill".to_string(),
             ),
-            Name::new(
-                "John".to_string(),
-                "".to_string(),
-                "Doe".to_string(),
-            ),
+            Name::new("John".to_string(), "".to_string(), "Doe".to_string()),
         ];
 
         let writer = CsvWriter::new(true);
