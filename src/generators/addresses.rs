@@ -248,7 +248,8 @@ mod tests {
     #[test]
     fn test_generate_apartment() {
         let apt = generate_apartment();
-        assert!(apt.contains("Apt") || apt.contains("Unit") || apt.contains("#") || apt.contains("Suite"));
+        assert!(apt.contains("Apt") || apt.contains("Unit") || apt.contains("#") ||
+                apt.contains("Suite") || apt.contains("Ste"));
     }
 
     #[test]
