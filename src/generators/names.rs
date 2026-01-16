@@ -43,6 +43,14 @@ fn get_random_suffix() -> String {
     suffixes[rng.gen_range(0..suffixes.len())].to_string()
 }
 
+/// Adds a realistic typo to a name string.
+///
+/// Randomly applies one of three typo types:
+/// - Double a letter (e.g., "John" -> "Johhn")
+/// - Transpose two adjacent letters (e.g., "John" -> "Jhon")
+/// - Remove a letter (e.g., "John" -> "Jon")
+///
+/// Returns the original string unchanged if it's empty or has less than 2 characters.
 fn add_typo(name: &str) -> String {
     if name.is_empty() {
         return name.to_string();
@@ -81,6 +89,10 @@ fn add_typo(name: &str) -> String {
     chars.into_iter().collect()
 }
 
+/// Converts a string to alternating case (e.g., "Joshua" -> "JoShUa").
+///
+/// Characters at even indices are uppercased, odd indices are lowercased.
+/// Used for testing case-insensitive matching in standardization systems.
 fn to_mixed_case(name: &str) -> String {
     name.chars().enumerate().map(|(i, c)| {
         if i % 2 == 0 {
@@ -151,15 +163,22 @@ mod tests {
 
     #[test]
     fn test_add_typo() {
-        // Test that typo function runs without panicking
         let result = add_typo("Joshua");
         assert!(!result.is_empty());
+        // Verify length changed by at most 1 character
+        assert!((result.len() as i32 - "Joshua".len() as i32).abs() <= 1);
     }
 
     #[test]
     fn test_to_mixed_case() {
         let result = to_mixed_case("Joshua");
-        // Should alternate or randomly mix case
+        assert_eq!(result, "JoShUa");
         assert_eq!(result.len(), "Joshua".len());
+
+        // Test with all lowercase
+        assert_eq!(to_mixed_case("hello"), "HeLlO");
+
+        // Test with all uppercase
+        assert_eq!(to_mixed_case("HELLO"), "HeLlO");
     }
 }
