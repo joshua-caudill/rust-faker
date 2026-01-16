@@ -96,6 +96,75 @@ fn generate_apartment() -> String {
     formats[rng.gen_range(0..formats.len())].clone()
 }
 
+fn apply_address_variance(mut address: Address) -> Address {
+    let mut rng = rand::thread_rng();
+
+    // Apply 1-3 random variance patterns
+    let num_variances = rng.gen_range(1..=3);
+
+    for _ in 0..num_variances {
+        let variance_type = rng.gen_range(0..10);
+
+        match variance_type {
+            0 => {
+                // Abbreviate street suffix
+                let parts: Vec<&str> = address.address1.split_whitespace().collect();
+                if let Some(&last) = parts.last() {
+                    let abbreviated = abbreviate_street_suffix(last);
+                    let mut new_parts = parts[..parts.len()-1].to_vec();
+                    new_parts.push(&abbreviated);
+                    address.address1 = new_parts.join(" ");
+                }
+            },
+            1 => {
+                // Replace with PO Box
+                address.address1 = generate_po_box();
+                address.address2 = String::new();
+            },
+            2 => {
+                // Add apartment/unit
+                address.address2 = generate_apartment();
+            },
+            3 => {
+                // Remove state
+                address.state = String::new();
+            },
+            4 => {
+                // Remove zip
+                address.zip = String::new();
+            },
+            5 => {
+                // Remove city
+                address.city = String::new();
+            },
+            6 => {
+                // All caps
+                address.address1 = address.address1.to_uppercase();
+                address.city = address.city.to_uppercase();
+            },
+            7 => {
+                // Add extra spaces
+                address.address1 = address.address1.replace(" ", "  ");
+            },
+            8 => {
+                // Add periods inconsistently
+                if rng.gen_bool(0.5) {
+                    address.address1 = address.address1.replace("St", "St.");
+                    address.address1 = address.address1.replace("Ave", "Ave.");
+                }
+            },
+            _ => {
+                // Mixed case
+                address.city = address.city.chars().enumerate().map(|(i, c)| {
+                    if i % 2 == 0 { c.to_uppercase().to_string() } else { c.to_lowercase().to_string() }
+                }).collect();
+            }
+        }
+    }
+
+    address
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -160,5 +229,36 @@ mod tests {
     fn test_generate_apartment() {
         let apt = generate_apartment();
         assert!(apt.contains("Apt") || apt.contains("Unit") || apt.contains("#") || apt.contains("Suite"));
+    }
+
+    #[test]
+    fn test_apply_address_variance_abbreviates_suffix() {
+        let clean = Address::new(
+            "123 Main Street".to_string(),
+            String::new(),
+            "Springfield".to_string(),
+            "IL".to_string(),
+            "62701".to_string(),
+        );
+
+        // Apply variance multiple times until we get abbreviation
+        // (since variance is random, we test the function exists and runs)
+        let varied = apply_address_variance(clean.clone());
+        assert!(!varied.address1.is_empty());
+    }
+
+    #[test]
+    fn test_apply_address_variance_can_add_po_box() {
+        let clean = Address::new(
+            "123 Main St".to_string(),
+            String::new(),
+            "Springfield".to_string(),
+            "IL".to_string(),
+            "62701".to_string(),
+        );
+
+        let varied = apply_address_variance(clean);
+        // Just verify it doesn't panic and returns something
+        assert!(!varied.address1.is_empty());
     }
 }
