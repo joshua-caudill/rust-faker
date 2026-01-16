@@ -1,7 +1,12 @@
 use clap::{Parser, Subcommand};
+use std::process;
 
 mod generators;
 mod writer;
+
+use generators::addresses::generate_addresses;
+use generators::names::generate_names;
+use writer::CsvWriter;
 
 #[derive(Parser)]
 #[command(name = "rust-faker")]
@@ -68,18 +73,36 @@ fn main() {
         Commands::Addresses { count, output, error_rate, quiet } => {
             if let Err(e) = validate_inputs(count, error_rate) {
                 eprintln!("Error: {}", e);
-                std::process::exit(1);
+                process::exit(1);
             }
-            println!("Generating {} addresses to {} (error_rate: {}, quiet: {})",
-                     count, output, error_rate, quiet);
+
+            let addresses = generate_addresses(count, error_rate);
+            let writer = CsvWriter::new(quiet);
+            if let Err(e) = writer.write_addresses(&output, &addresses) {
+                eprintln!("Error writing addresses: {}", e);
+                process::exit(1);
+            }
+
+            if !quiet {
+                println!("Successfully generated {} addresses to {}", count, output);
+            }
         }
         Commands::Names { count, output, error_rate, quiet } => {
             if let Err(e) = validate_inputs(count, error_rate) {
                 eprintln!("Error: {}", e);
-                std::process::exit(1);
+                process::exit(1);
             }
-            println!("Generating {} names to {} (error_rate: {}, quiet: {})",
-                     count, output, error_rate, quiet);
+
+            let names = generate_names(count, error_rate);
+            let writer = CsvWriter::new(quiet);
+            if let Err(e) = writer.write_names(&output, &names) {
+                eprintln!("Error writing names: {}", e);
+                process::exit(1);
+            }
+
+            if !quiet {
+                println!("Successfully generated {} names to {}", count, output);
+            }
         }
     }
 }
