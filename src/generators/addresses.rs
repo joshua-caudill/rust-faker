@@ -39,6 +39,27 @@ pub fn generate_clean_address() -> Address {
     Address::new(address1, address2, city, state, zip)
 }
 
+/// Generates a vector of addresses with configurable variance.
+///
+/// Creates `count` addresses, applying variance patterns to each address
+/// with probability `error_rate`. When variance is not applied,
+/// returns clean, properly formatted addresses.
+///
+/// # Arguments
+/// * `count` - Number of addresses to generate
+/// * `error_rate` - Probability (0.0 to 1.0) of applying variance to each address
+///
+/// # Panics
+/// Panics if `error_rate` is outside the range [0.0, 1.0]
+///
+/// # Examples
+/// ```
+/// // Generate 10 clean addresses
+/// let clean_addresses = generate_addresses(10, 0.0);
+///
+/// // Generate 10 addresses with 30% variance
+/// let varied_addresses = generate_addresses(10, 0.3);
+/// ```
 pub fn generate_addresses(count: usize, error_rate: f64) -> Vec<Address> {
     let mut rng = rand::thread_rng();
     let mut addresses = Vec::with_capacity(count);

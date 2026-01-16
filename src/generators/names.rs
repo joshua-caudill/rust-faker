@@ -31,6 +31,27 @@ pub fn generate_clean_name() -> Name {
     Name::new(first_name, middle_name, last_name)
 }
 
+/// Generates a vector of names with configurable variance.
+///
+/// Creates `count` names, applying variance patterns to each name
+/// with probability `error_rate`. When variance is not applied,
+/// returns clean, properly formatted names.
+///
+/// # Arguments
+/// * `count` - Number of names to generate
+/// * `error_rate` - Probability (0.0 to 1.0) of applying variance to each name
+///
+/// # Panics
+/// Panics if `error_rate` is outside the range [0.0, 1.0]
+///
+/// # Examples
+/// ```
+/// // Generate 10 clean names
+/// let clean_names = generate_names(10, 0.0);
+///
+/// // Generate 10 names with 30% variance
+/// let varied_names = generate_names(10, 0.3);
+/// ```
 pub fn generate_names(count: usize, error_rate: f64) -> Vec<Name> {
     let mut rng = rand::thread_rng();
     let mut names = Vec::with_capacity(count);
