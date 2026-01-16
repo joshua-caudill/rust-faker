@@ -59,6 +59,43 @@ fn abbreviate_street_suffix(suffix: &str) -> String {
     }.to_string()
 }
 
+fn generate_po_box() -> String {
+    let mut rng = rand::thread_rng();
+    let box_number: u32 = (1..9999).fake();
+
+    let formats = vec![
+        format!("PO Box {}", box_number),
+        format!("P.O. Box {}", box_number),
+        format!("POB {}", box_number),
+    ];
+
+    formats[rng.gen_range(0..formats.len())].clone()
+}
+
+fn generate_apartment() -> String {
+    let mut rng = rand::thread_rng();
+    let unit: String = format!("{}{}",
+        rng.gen_range(1..999),
+        if rng.gen_bool(0.3) {
+            ['A', 'B', 'C', 'D'][rng.gen_range(0..4)].to_string()
+        } else {
+            String::new()
+        }
+    );
+
+    let formats = vec![
+        format!("Apt {}", unit),
+        format!("Apartment {}", unit),
+        format!("#{}", unit),
+        format!("Unit {}", unit),
+        format!("Suite {}", unit),
+        format!("Ste {}", unit),
+        format!("Ste. {}", unit),
+    ];
+
+    formats[rng.gen_range(0..formats.len())].clone()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -111,5 +148,17 @@ mod tests {
     fn test_abbreviate_street_suffix_unknown() {
         // Unknown suffixes should return as-is
         assert_eq!(abbreviate_street_suffix("Unknown"), "Unknown");
+    }
+
+    #[test]
+    fn test_generate_po_box() {
+        let po_box = generate_po_box();
+        assert!(po_box.contains("Box") || po_box.contains("BOX"));
+    }
+
+    #[test]
+    fn test_generate_apartment() {
+        let apt = generate_apartment();
+        assert!(apt.contains("Apt") || apt.contains("Unit") || apt.contains("#") || apt.contains("Suite"));
     }
 }
