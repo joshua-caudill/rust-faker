@@ -31,6 +31,18 @@ pub fn generate_clean_name() -> Name {
     Name::new(first_name, middle_name, last_name)
 }
 
+fn get_random_prefix() -> String {
+    let mut rng = rand::thread_rng();
+    let prefixes = vec!["Dr.", "Mr.", "Mrs.", "Ms.", "Prof.", "Rev."];
+    prefixes[rng.gen_range(0..prefixes.len())].to_string()
+}
+
+fn get_random_suffix() -> String {
+    let mut rng = rand::thread_rng();
+    let suffixes = vec!["Jr.", "Sr.", "II", "III", "IV", "MD", "PhD", "Esq."];
+    suffixes[rng.gen_range(0..suffixes.len())].to_string()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -73,5 +85,19 @@ mod tests {
         let name2 = generate_clean_name();
         // Very unlikely to generate identical names
         assert_ne!(name1, name2);
+    }
+
+    #[test]
+    fn test_get_random_prefix() {
+        let prefix = get_random_prefix();
+        let valid_prefixes = vec!["Dr.", "Mr.", "Mrs.", "Ms.", "Prof.", "Rev."];
+        assert!(valid_prefixes.contains(&prefix.as_str()));
+    }
+
+    #[test]
+    fn test_get_random_suffix() {
+        let suffix = get_random_suffix();
+        let valid_suffixes = vec!["Jr.", "Sr.", "II", "III", "IV", "MD", "PhD", "Esq."];
+        assert!(valid_suffixes.contains(&suffix.as_str()));
     }
 }

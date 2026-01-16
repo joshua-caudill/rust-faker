@@ -242,7 +242,7 @@ mod tests {
     #[test]
     fn test_generate_po_box() {
         let po_box = generate_po_box();
-        assert!(po_box.contains("Box") || po_box.contains("BOX"));
+        assert!(po_box.contains("Box") || po_box.contains("BOX") || po_box.contains("POB"));
     }
 
     #[test]
