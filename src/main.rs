@@ -1,5 +1,7 @@
 use clap::{Parser, Subcommand};
 
+mod generators;
+
 #[derive(Parser)]
 #[command(name = "rust-faker")]
 #[command(about = "Generate test data with configurable variance", long_about = None)]
