@@ -1,6 +1,7 @@
 use clap::{Parser, Subcommand};
 
 mod generators;
+mod writer;
 
 #[derive(Parser)]
 #[command(name = "rust-faker")]
