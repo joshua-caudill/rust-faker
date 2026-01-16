@@ -31,6 +31,26 @@ pub fn generate_clean_name() -> Name {
     Name::new(first_name, middle_name, last_name)
 }
 
+pub fn generate_names(count: usize, error_rate: f64) -> Vec<Name> {
+    let mut rng = rand::thread_rng();
+    let mut names = Vec::with_capacity(count);
+
+    for _ in 0..count {
+        let clean_name = generate_clean_name();
+
+        // Apply variance based on error rate
+        let name = if rng.gen_bool(error_rate) {
+            apply_name_variance(clean_name)
+        } else {
+            clean_name
+        };
+
+        names.push(name);
+    }
+
+    names
+}
+
 fn get_random_prefix() -> String {
     let mut rng = rand::thread_rng();
     let prefixes = vec!["Dr.", "Mr.", "Mrs.", "Ms.", "Prof.", "Rev."];
@@ -304,5 +324,28 @@ mod tests {
         assert!(!varied.first_name.is_empty() ||
                 !varied.middle_name.is_empty() ||
                 !varied.last_name.is_empty());
+    }
+
+    #[test]
+    fn test_generate_names_count() {
+        let names = generate_names(10, 0.0);
+        assert_eq!(names.len(), 10);
+    }
+
+    #[test]
+    fn test_generate_names_zero_error_rate() {
+        let names = generate_names(5, 0.0);
+        // All should be clean
+        for name in names {
+            assert!(!name.first_name.is_empty());
+            assert!(!name.last_name.is_empty());
+        }
+    }
+
+    #[test]
+    fn test_generate_names_full_error_rate() {
+        let names = generate_names(5, 1.0);
+        // All should have variance applied
+        assert_eq!(names.len(), 5);
     }
 }
