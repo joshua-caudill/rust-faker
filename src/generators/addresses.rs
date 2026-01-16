@@ -15,6 +15,16 @@ impl Address {
     pub fn new(address1: String, address2: String, city: String, state: String, zip: String) -> Self {
         Self { address1, address2, city, state, zip }
     }
+
+    pub fn to_record(&self) -> Vec<String> {
+        vec![
+            self.address1.clone(),
+            self.address2.clone(),
+            self.city.clone(),
+            self.state.clone(),
+            self.zip.clone(),
+        ]
+    }
 }
 
 pub fn generate_clean_address() -> Address {
@@ -224,6 +234,19 @@ mod tests {
         assert_eq!(addr.city, "Springfield");
         assert_eq!(addr.state, "IL");
         assert_eq!(addr.zip, "62701");
+    }
+
+    #[test]
+    fn test_address_to_record() {
+        let addr = Address::new(
+            "123 Main St".to_string(),
+            "Apt 4B".to_string(),
+            "Springfield".to_string(),
+            "IL".to_string(),
+            "62701".to_string(),
+        );
+        let record = addr.to_record();
+        assert_eq!(record, vec!["123 Main St", "Apt 4B", "Springfield", "IL", "62701"]);
     }
 
     #[test]
