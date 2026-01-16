@@ -39,6 +39,26 @@ pub fn generate_clean_address() -> Address {
     Address::new(address1, address2, city, state, zip)
 }
 
+fn abbreviate_street_suffix(suffix: &str) -> String {
+    match suffix {
+        "Street" => "St",
+        "Avenue" => "Ave",
+        "Road" => "Rd",
+        "Boulevard" => "Blvd",
+        "Drive" => "Dr",
+        "Lane" => "Ln",
+        "Parkway" => "Pkwy",
+        "Court" => "Ct",
+        "Circle" => "Cir",
+        "Way" => "Way",
+        "Place" => "Pl",
+        "Square" => "Sq",
+        "Trail" => "Trl",
+        "Terrace" => "Ter",
+        _ => suffix,
+    }.to_string()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -77,5 +97,19 @@ mod tests {
         let addr2 = generate_clean_address();
         // Very unlikely to generate identical addresses
         assert_ne!(addr1, addr2);
+    }
+
+    #[test]
+    fn test_abbreviate_street_suffix_known() {
+        assert_eq!(abbreviate_street_suffix("Street"), "St");
+        assert_eq!(abbreviate_street_suffix("Avenue"), "Ave");
+        assert_eq!(abbreviate_street_suffix("Road"), "Rd");
+        assert_eq!(abbreviate_street_suffix("Boulevard"), "Blvd");
+    }
+
+    #[test]
+    fn test_abbreviate_street_suffix_unknown() {
+        // Unknown suffixes should return as-is
+        assert_eq!(abbreviate_street_suffix("Unknown"), "Unknown");
     }
 }
