@@ -194,6 +194,8 @@ fn apply_name_variance(mut name: Name) -> Name {
             13 => {
                 // Mixed case
                 name.first_name = to_mixed_case(&name.first_name);
+                name.middle_name = to_mixed_case(&name.middle_name);
+                name.last_name = to_mixed_case(&name.last_name);
             },
             _ => {
                 // Add typo
