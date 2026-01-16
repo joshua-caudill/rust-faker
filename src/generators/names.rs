@@ -103,6 +103,17 @@ fn to_mixed_case(name: &str) -> String {
     }).collect()
 }
 
+/// Applies 1-3 random variance patterns to a Name.
+///
+/// Randomly selects and applies between 1 and 3 variance types from 15 possible patterns:
+/// - Field swapping and combining (0-3)
+/// - Hyphenation patterns (4-6)
+/// - Prefixes and suffixes (7-8)
+/// - Nickname formats (9-10)
+/// - Case variations (11-13)
+/// - Typos (14)
+///
+/// Variance patterns can be applied multiple times, potentially creating cumulative effects.
 fn apply_name_variance(mut name: Name) -> Name {
     let mut rng = rand::thread_rng();
 
@@ -154,7 +165,9 @@ fn apply_name_variance(mut name: Name) -> Name {
             },
             8 => {
                 // Add suffix to last name
-                name.last_name = format!("{} {}", name.last_name, get_random_suffix());
+                if !name.last_name.is_empty() {
+                    name.last_name = format!("{} {}", name.last_name, get_random_suffix());
+                }
             },
             9 => {
                 // Nickname in quotes
@@ -162,16 +175,20 @@ fn apply_name_variance(mut name: Name) -> Name {
             },
             10 => {
                 // Nickname in parentheses
-                name.first_name = format!("{} ({})", name.first_name, &name.first_name[..3.min(name.first_name.len())]);
+                if !name.first_name.is_empty() {
+                    name.first_name = format!("{} ({})", name.first_name, &name.first_name[..3.min(name.first_name.len())]);
+                }
             },
             11 => {
                 // All caps
                 name.first_name = name.first_name.to_uppercase();
+                name.middle_name = name.middle_name.to_uppercase();
                 name.last_name = name.last_name.to_uppercase();
             },
             12 => {
                 // All lowercase
                 name.first_name = name.first_name.to_lowercase();
+                name.middle_name = name.middle_name.to_lowercase();
                 name.last_name = name.last_name.to_lowercase();
             },
             13 => {
