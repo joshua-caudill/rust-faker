@@ -43,6 +43,54 @@ fn get_random_suffix() -> String {
     suffixes[rng.gen_range(0..suffixes.len())].to_string()
 }
 
+fn add_typo(name: &str) -> String {
+    if name.is_empty() {
+        return name.to_string();
+    }
+
+    let mut rng = rand::thread_rng();
+    let mut chars: Vec<char> = name.chars().collect();
+
+    if chars.len() < 2 {
+        return name.to_string();
+    }
+
+    let typo_type = rng.gen_range(0..3);
+    match typo_type {
+        0 => {
+            // Double a letter
+            let pos = rng.gen_range(0..chars.len());
+            chars.insert(pos, chars[pos]);
+        },
+        1 => {
+            // Transpose two letters
+            if chars.len() >= 2 {
+                let pos = rng.gen_range(0..chars.len()-1);
+                chars.swap(pos, pos + 1);
+            }
+        },
+        _ => {
+            // Remove a letter (but keep at least one)
+            if chars.len() > 1 {
+                let pos = rng.gen_range(0..chars.len());
+                chars.remove(pos);
+            }
+        }
+    }
+
+    chars.into_iter().collect()
+}
+
+fn to_mixed_case(name: &str) -> String {
+    name.chars().enumerate().map(|(i, c)| {
+        if i % 2 == 0 {
+            c.to_uppercase().to_string()
+        } else {
+            c.to_lowercase().to_string()
+        }
+    }).collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -99,5 +147,19 @@ mod tests {
         let suffix = get_random_suffix();
         let valid_suffixes = vec!["Jr.", "Sr.", "II", "III", "IV", "MD", "PhD", "Esq."];
         assert!(valid_suffixes.contains(&suffix.as_str()));
+    }
+
+    #[test]
+    fn test_add_typo() {
+        // Test that typo function runs without panicking
+        let result = add_typo("Joshua");
+        assert!(!result.is_empty());
+    }
+
+    #[test]
+    fn test_to_mixed_case() {
+        let result = to_mixed_case("Joshua");
+        // Should alternate or randomly mix case
+        assert_eq!(result.len(), "Joshua".len());
     }
 }
