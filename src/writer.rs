@@ -5,6 +5,7 @@ use std::io;
 use std::path::Path;
 
 use crate::generators::addresses::Address;
+use crate::generators::names::Name;
 
 pub struct CsvWriter {
     quiet: bool,
@@ -51,6 +52,35 @@ impl CsvWriter {
         // Write records
         for address in addresses {
             writer.write_record(&address.to_record())?;
+            pb.inc(1);
+        }
+
+        pb.finish_and_clear();
+        writer.flush()?;
+
+        Ok(())
+    }
+
+    pub fn write_names(&self, path: &str, names: &[Name]) -> io::Result<()> {
+        // Create parent directories if needed
+        if let Some(parent) = Path::new(path).parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+
+        // Configure pipe delimiter
+        let mut builder = csv::WriterBuilder::new();
+        builder.delimiter(b'|');
+        let mut writer = builder.from_path(path)?;
+
+        // Write header
+        writer.write_record(&["FirstName", "MiddleName", "LastName"])?;
+
+        // Create progress bar
+        let pb = self.create_progress_bar(names.len(), "Generating names");
+
+        // Write records
+        for name in names {
+            writer.write_record(&name.to_record())?;
             pb.inc(1);
         }
 
@@ -121,5 +151,39 @@ mod tests {
         assert!(contents.contains("Address1|Address2|City|State|Zip"));
         assert!(contents.contains("123 Main St|Apt 4B|Springfield|IL|62701"));
         assert!(contents.contains("456 Oak Ave||Chicago|IL|60601"));
+    }
+
+    #[test]
+    fn test_write_names() {
+        use tempfile::NamedTempFile;
+        use std::io::Read;
+
+        let temp_file = NamedTempFile::new().unwrap();
+        let path = temp_file.path().to_str().unwrap();
+
+        let names = vec![
+            Name::new(
+                "Joshua".to_string(),
+                "Allen".to_string(),
+                "Caudill".to_string(),
+            ),
+            Name::new(
+                "John".to_string(),
+                "".to_string(),
+                "Doe".to_string(),
+            ),
+        ];
+
+        let writer = CsvWriter::new(true);
+        writer.write_names(path, &names).unwrap();
+
+        // Read the file and verify contents
+        let mut file = std::fs::File::open(path).unwrap();
+        let mut contents = String::new();
+        file.read_to_string(&mut contents).unwrap();
+
+        assert!(contents.contains("FirstName|MiddleName|LastName"));
+        assert!(contents.contains("Joshua|Allen|Caudill"));
+        assert!(contents.contains("John||Doe"));
     }
 }

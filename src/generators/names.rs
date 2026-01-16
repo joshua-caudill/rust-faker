@@ -13,6 +13,14 @@ impl Name {
     pub fn new(first_name: String, middle_name: String, last_name: String) -> Self {
         Self { first_name, middle_name, last_name }
     }
+
+    pub fn to_record(&self) -> Vec<String> {
+        vec![
+            self.first_name.clone(),
+            self.middle_name.clone(),
+            self.last_name.clone(),
+        ]
+    }
 }
 
 pub fn generate_clean_name() -> Name {
@@ -278,6 +286,17 @@ mod tests {
         assert_eq!(name.first_name, "Joshua");
         assert_eq!(name.middle_name, "");
         assert_eq!(name.last_name, "Caudill");
+    }
+
+    #[test]
+    fn test_name_to_record() {
+        let name = Name::new(
+            "Joshua".to_string(),
+            "Allen".to_string(),
+            "Caudill".to_string(),
+        );
+        let record = name.to_record();
+        assert_eq!(record, vec!["Joshua", "Allen", "Caudill"]);
     }
 
     #[test]
