@@ -39,6 +39,26 @@ pub fn generate_clean_address() -> Address {
     Address::new(address1, address2, city, state, zip)
 }
 
+pub fn generate_addresses(count: usize, error_rate: f64) -> Vec<Address> {
+    let mut rng = rand::thread_rng();
+    let mut addresses = Vec::with_capacity(count);
+
+    for _ in 0..count {
+        let clean_address = generate_clean_address();
+
+        // Apply variance based on error rate
+        let address = if rng.gen_bool(error_rate) {
+            apply_address_variance(clean_address)
+        } else {
+            clean_address
+        };
+
+        addresses.push(address);
+    }
+
+    addresses
+}
+
 fn abbreviate_street_suffix(suffix: &str) -> String {
     match suffix {
         "Street" => "St",
@@ -260,5 +280,31 @@ mod tests {
         let varied = apply_address_variance(clean);
         // Just verify it doesn't panic and returns something
         assert!(!varied.address1.is_empty());
+    }
+
+    #[test]
+    fn test_generate_addresses_count() {
+        let addresses = generate_addresses(10, 0.0);
+        assert_eq!(addresses.len(), 10);
+    }
+
+    #[test]
+    fn test_generate_addresses_zero_error_rate() {
+        let addresses = generate_addresses(5, 0.0);
+        // All should be clean (have all fields populated)
+        for addr in addresses {
+            assert!(!addr.address1.is_empty());
+            assert!(!addr.city.is_empty());
+            assert!(!addr.state.is_empty());
+            assert!(!addr.zip.is_empty());
+        }
+    }
+
+    #[test]
+    fn test_generate_addresses_full_error_rate() {
+        let addresses = generate_addresses(5, 1.0);
+        // All should have variance applied
+        // Hard to test exactly, but verify we got addresses
+        assert_eq!(addresses.len(), 5);
     }
 }
