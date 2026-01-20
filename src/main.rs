@@ -167,7 +167,10 @@ fn main() {
                         }
                     }
                 } else {
-                    state_input.split(',').map(|s| s.trim().to_string()).collect()
+                    state_input
+                        .split(',')
+                        .map(|s| s.trim().to_string())
+                        .collect()
                 };
 
                 match load_addresses_from_cache(&states_to_load, count) {

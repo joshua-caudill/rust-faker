@@ -1,17 +1,16 @@
 /// OpenAddresses.io regional data source URLs
-pub const REGION_NORTHEAST: &str = "https://data.openaddresses.io/openaddr-collected-us_northeast.zip";
+pub const REGION_NORTHEAST: &str =
+    "https://data.openaddresses.io/openaddr-collected-us_northeast.zip";
 pub const REGION_MIDWEST: &str = "https://data.openaddresses.io/openaddr-collected-us_midwest.zip";
 pub const REGION_SOUTH: &str = "https://data.openaddresses.io/openaddr-collected-us_south.zip";
 pub const REGION_WEST: &str = "https://data.openaddresses.io/openaddr-collected-us_west.zip";
 
 /// All valid US state codes (50 states + DC)
 pub const ALL_STATES: [&str; 51] = [
-    "AK", "AL", "AR", "AZ", "CA", "CO", "CT", "DC", "DE", "FL",
-    "GA", "HI", "IA", "ID", "IL", "IN", "KS", "KY", "LA", "MA",
-    "MD", "ME", "MI", "MN", "MO", "MS", "MT", "NC", "ND", "NE",
-    "NH", "NJ", "NM", "NV", "NY", "OH", "OK", "OR", "PA", "RI",
-    "SC", "SD", "TN", "TX", "UT", "VA", "VT", "WA", "WI", "WV",
-    "WY",
+    "AK", "AL", "AR", "AZ", "CA", "CO", "CT", "DC", "DE", "FL", "GA", "HI", "IA", "ID", "IL", "IN",
+    "KS", "KY", "LA", "MA", "MD", "ME", "MI", "MN", "MO", "MS", "MT", "NC", "ND", "NE", "NH", "NJ",
+    "NM", "NV", "NY", "OH", "OK", "OR", "PA", "RI", "SC", "SD", "TN", "TX", "UT", "VA", "VT", "WA",
+    "WI", "WV", "WY",
 ];
 
 /// Returns the OpenAddresses.io region URL for a given state code.
@@ -97,6 +96,7 @@ pub fn is_valid_state(state: &str) -> bool {
 /// assert_eq!(get_state_path_name("DC"), Some("dc".to_string()));
 /// assert_eq!(get_state_path_name("invalid"), None);
 /// ```
+#[allow(dead_code)]
 pub fn get_state_path_name(state: &str) -> Option<String> {
     if is_valid_state(state) {
         Some(state.to_lowercase())
@@ -121,7 +121,9 @@ mod tests {
     #[test]
     fn test_get_region_url_midwest() {
         // Test all Midwest states
-        let midwest_states = ["IL", "IN", "IA", "KS", "MI", "MN", "MO", "NE", "ND", "OH", "SD", "WI"];
+        let midwest_states = [
+            "IL", "IN", "IA", "KS", "MI", "MN", "MO", "NE", "ND", "OH", "SD", "WI",
+        ];
         for state in &midwest_states {
             assert_eq!(get_region_url(state), Some(REGION_MIDWEST));
         }

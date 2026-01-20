@@ -772,7 +772,10 @@ fn test_addresses_load_from_nonexistent_file() {
         .output()
         .expect("Failed to execute command");
 
-    assert!(!output.status.success(), "Command should fail for nonexistent file");
+    assert!(
+        !output.status.success(),
+        "Command should fail for nonexistent file"
+    );
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
         stderr.contains("Error loading addresses"),
@@ -828,8 +831,14 @@ fn test_download_help_command() {
     assert!(output.status.success());
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("--all"), "Help should mention --all option");
-    assert!(stdout.contains("--list"), "Help should mention --list option");
-    assert!(stdout.contains("--limit"), "Help should mention --limit option");
+    assert!(
+        stdout.contains("--list"),
+        "Help should mention --list option"
+    );
+    assert!(
+        stdout.contains("--limit"),
+        "Help should mention --limit option"
+    );
 }
 
 #[test]
@@ -898,9 +907,12 @@ fn test_addresses_state_and_input_mutual_exclusion() {
     let output = Command::new(get_binary_path())
         .args(&[
             "addresses",
-            "--state", "IL",
-            "--input", "file.csv",
-            "--output", output_str,
+            "--state",
+            "IL",
+            "--input",
+            "file.csv",
+            "--output",
+            output_str,
         ])
         .output()
         .expect("Failed to execute command");
@@ -922,5 +934,8 @@ fn test_addresses_help_mentions_state_flag() {
 
     assert!(output.status.success());
     let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("--state"), "Help should mention --state option");
+    assert!(
+        stdout.contains("--state"),
+        "Help should mention --state option"
+    );
 }

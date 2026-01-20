@@ -8,6 +8,7 @@ use std::path::PathBuf;
 use std::time::SystemTime;
 
 /// Default limit for addresses per state
+#[allow(dead_code)]
 pub const DEFAULT_LIMIT: usize = 10_000;
 
 /// Downloads address data for specified states from OpenAddresses.io.
@@ -50,7 +51,10 @@ pub fn download_states(
         if force || !cache::is_state_cached(&state_upper)? {
             states_to_download.push(state_upper);
         } else if !quiet {
-            println!("State {} already cached (use --force to re-download)", state_upper);
+            println!(
+                "State {} already cached (use --force to re-download)",
+                state_upper
+            );
         }
     }
 
@@ -67,7 +71,10 @@ pub fn download_states(
 
     for state in &states_to_download {
         if let Some(region_url) = regions::get_region_url(state) {
-            regions_map.entry(region_url).or_insert_with(Vec::new).push(state.clone());
+            regions_map
+                .entry(region_url)
+                .or_default()
+                .push(state.clone());
         }
     }
 
@@ -81,7 +88,11 @@ pub fn download_states(
         let zip_data = download_region(region_url)?;
 
         if !quiet {
-            println!("Downloaded {} bytes, extracting states: {:?}", zip_data.len(), region_states);
+            println!(
+                "Downloaded {} bytes, extracting states: {:?}",
+                zip_data.len(),
+                region_states
+            );
         }
 
         // Extract and cache each state from this region
@@ -120,7 +131,10 @@ pub fn download_states(
     }
 
     if !quiet {
-        println!("Successfully downloaded {} state(s)", states_to_download.len());
+        println!(
+            "Successfully downloaded {} state(s)",
+            states_to_download.len()
+        );
     }
 
     Ok(())
@@ -150,7 +164,11 @@ pub fn print_cache_list() -> io::Result<()> {
     }
 
     println!("{:-<80}", "");
-    println!("Total: {} states, {} records", cached_states.len(), total_records);
+    println!(
+        "Total: {} states, {} records",
+        cached_states.len(),
+        total_records
+    );
 
     let cache_dir = cache::get_cache_dir()?;
     println!("\nCache location: {}", cache_dir.display());
@@ -168,18 +186,18 @@ pub fn print_cache_list() -> io::Result<()> {
 /// * `Err(io::Error)` - If the download failed
 fn download_region(url: &str) -> io::Result<Vec<u8>> {
     let response = reqwest::blocking::get(url)
-        .map_err(|e| io::Error::new(io::ErrorKind::Other, format!("HTTP request failed: {}", e)))?;
+        .map_err(|e| io::Error::other(format!("HTTP request failed: {}", e)))?;
 
     if !response.status().is_success() {
-        return Err(io::Error::new(
-            io::ErrorKind::Other,
-            format!("HTTP error: {}", response.status()),
-        ));
+        return Err(io::Error::other(format!(
+            "HTTP error: {}",
+            response.status()
+        )));
     }
 
     let bytes = response
         .bytes()
-        .map_err(|e| io::Error::new(io::ErrorKind::Other, format!("Failed to read response: {}", e)))?;
+        .map_err(|e| io::Error::other(format!("Failed to read response: {}", e)))?;
 
     Ok(bytes.to_vec())
 }
@@ -197,7 +215,7 @@ fn download_region(url: &str) -> io::Result<Vec<u8>> {
 fn extract_state_addresses(zip_data: &[u8], state: &str, limit: usize) -> io::Result<Vec<Address>> {
     let cursor = Cursor::new(zip_data);
     let mut archive = zip::ZipArchive::new(cursor)
-        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, format!("Invalid zip file: {}", e)))?;
+        .map_err(|e| io::Error::other(format!("Invalid zip file: {}", e)))?;
 
     let state_lower = state.to_lowercase();
     let prefix = format!("us/{}/", state_lower);
@@ -208,15 +226,16 @@ fn extract_state_addresses(zip_data: &[u8], state: &str, limit: usize) -> io::Re
     for i in 0..archive.len() {
         let mut file = archive
             .by_index(i)
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, format!("Failed to read zip entry: {}", e)))?;
+            .map_err(|e| io::Error::other(format!("Failed to read zip entry: {}", e)))?;
 
         let file_name = file.name().to_string();
 
         // Check if this file is for our state
         if file_name.starts_with(&prefix) && file_name.ends_with(".csv") {
             let mut contents = String::new();
-            file.read_to_string(&mut contents)
-                .map_err(|e| io::Error::new(io::ErrorKind::Other, format!("Failed to read file {}: {}", file_name, e)))?;
+            file.read_to_string(&mut contents).map_err(|e| {
+                io::Error::other(format!("Failed to read file {}: {}", file_name, e))
+            })?;
 
             let addresses = parse_openaddresses_csv(&contents)?;
             all_addresses.extend(addresses);
@@ -249,7 +268,12 @@ fn parse_openaddresses_csv(content: &str) -> io::Result<Vec<Address>> {
 
     let headers = reader
         .headers()
-        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, format!("Failed to read CSV headers: {}", e)))?
+        .map_err(|e| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("Failed to read CSV headers: {}", e),
+            )
+        })?
         .clone();
 
     // Map column names to indices
@@ -260,25 +284,33 @@ fn parse_openaddresses_csv(content: &str) -> io::Result<Vec<Address>> {
     }
 
     // Find relevant columns (OpenAddresses format)
-    let number_idx = column_map.get("number")
+    let number_idx = column_map
+        .get("number")
         .or_else(|| column_map.get("house_number"));
-    let street_idx = column_map.get("street")
+    let street_idx = column_map
+        .get("street")
         .or_else(|| column_map.get("street_name"));
-    let unit_idx = column_map.get("unit")
+    let unit_idx = column_map
+        .get("unit")
         .or_else(|| column_map.get("apartment"));
-    let city_idx = column_map.get("city")
+    let city_idx = column_map
+        .get("city")
         .or_else(|| column_map.get("locality"));
-    let state_idx = column_map.get("region")
-        .or_else(|| column_map.get("state"));
-    let zip_idx = column_map.get("postcode")
+    let state_idx = column_map.get("region").or_else(|| column_map.get("state"));
+    let zip_idx = column_map
+        .get("postcode")
         .or_else(|| column_map.get("zip"))
         .or_else(|| column_map.get("postal_code"));
 
     let mut addresses: Vec<Address> = Vec::new();
 
     for result in reader.records() {
-        let record = result
-            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, format!("Failed to read CSV record: {}", e)))?;
+        let record = result.map_err(|e| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("Failed to read CSV record: {}", e),
+            )
+        })?;
 
         // Extract fields
         let number = number_idx

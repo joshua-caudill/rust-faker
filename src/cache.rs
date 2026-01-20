@@ -93,10 +93,7 @@ pub fn is_state_cached(state: &str) -> io::Result<bool> {
 pub fn list_cached_states() -> io::Result<Vec<(String, StateCache)>> {
     let manifest = load_manifest()?;
 
-    let mut states: Vec<(String, StateCache)> = manifest
-        .states
-        .into_iter()
-        .collect();
+    let mut states: Vec<(String, StateCache)> = manifest.states.into_iter().collect();
 
     states.sort_by(|a, b| a.0.cmp(&b.0));
 
@@ -209,7 +206,10 @@ mod tests {
 
         // Check if sorted
         for i in 1..states.len() {
-            assert!(states[i - 1].0 <= states[i].0, "States should be sorted alphabetically");
+            assert!(
+                states[i - 1].0 <= states[i].0,
+                "States should be sorted alphabetically"
+            );
         }
     }
 

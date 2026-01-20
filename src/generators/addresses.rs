@@ -147,9 +147,7 @@ fn map_column_name(name: &str) -> Option<&'static str> {
 
     match lower.trim() {
         // Address1 mappings
-        "address1" | "address" | "street" | "street_address" | "streetaddress" => {
-            Some("address1")
-        }
+        "address1" | "address" | "street" | "street_address" | "streetaddress" => Some("address1"),
         // Number (for OpenAddresses format - will be combined with street)
         "number" | "house_number" | "housenumber" | "street_number" | "streetnumber" => {
             Some("number")
@@ -332,7 +330,10 @@ pub fn load_addresses_from_cache(
         if !cache::is_state_cached(&state_upper)? {
             return Err(io::Error::new(
                 io::ErrorKind::NotFound,
-                format!("State '{}' not cached. Run 'rust-faker download {}' first.", state_upper, state_upper),
+                format!(
+                    "State '{}' not cached. Run 'rust-faker download {}' first.",
+                    state_upper, state_upper
+                ),
             ));
         }
 
