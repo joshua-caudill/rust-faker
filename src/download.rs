@@ -85,7 +85,7 @@ pub fn download_states(
         }
 
         // Download the regional zip file
-        let zip_data = download_region(region_url)?;
+        let zip_data = download_region(region_url, quiet)?;
 
         if !quiet {
             println!(
@@ -176,15 +176,16 @@ pub fn print_cache_list() -> io::Result<()> {
     Ok(())
 }
 
-/// Downloads a regional zip file from OpenAddresses.io.
+/// Downloads a regional zip file from OpenAddresses.io with retry logic.
 ///
 /// # Arguments
 /// * `url` - The URL of the regional zip file
+/// * `quiet` - If true, suppress progress output
 ///
 /// # Returns
 /// * `Ok(Vec<u8>)` - The downloaded zip file data
-/// * `Err(io::Error)` - If the download failed
-fn download_region(url: &str) -> io::Result<Vec<u8>> {
+/// * `Err(io::Error)` - If the download failed after all retries
+fn download_region(url: &str, quiet: bool) -> io::Result<Vec<u8>> {
     // Create client with extended timeout for large files (regional zips can be 100MB+)
     let client = reqwest::blocking::Client::builder()
         .timeout(Duration::from_secs(600)) // 10 minute timeout
@@ -192,26 +193,55 @@ fn download_region(url: &str) -> io::Result<Vec<u8>> {
         .build()
         .map_err(|e| io::Error::other(format!("Failed to create HTTP client: {}", e)))?;
 
-    let response = client
-        .get(url)
-        .send()
-        .map_err(|e| io::Error::other(format!("HTTP request failed: {}", e)))?;
+    let max_retries = 3;
+    let mut last_error = String::new();
 
-    if !response.status().is_success() {
-        let status = response.status();
-        let hint = if status.as_u16() == 429 {
-            " (rate limited - please wait a few minutes before retrying)"
-        } else {
-            ""
+    for attempt in 0..=max_retries {
+        if attempt > 0 {
+            // Exponential backoff: 30s, 60s, 120s
+            let wait_secs = 30 * (1 << (attempt - 1));
+            if !quiet {
+                println!(
+                    "Rate limited. Waiting {} seconds before retry {}/{}...",
+                    wait_secs, attempt, max_retries
+                );
+            }
+            std::thread::sleep(Duration::from_secs(wait_secs));
+        }
+
+        let response = match client.get(url).send() {
+            Ok(r) => r,
+            Err(e) => {
+                last_error = format!("HTTP request failed: {}", e);
+                if attempt < max_retries {
+                    continue;
+                }
+                return Err(io::Error::other(last_error));
+            }
         };
-        return Err(io::Error::other(format!("HTTP error: {}{}", status, hint)));
+
+        let status = response.status();
+        if status.is_success() {
+            let bytes = response
+                .bytes()
+                .map_err(|e| io::Error::other(format!("Failed to read response: {}", e)))?;
+            return Ok(bytes.to_vec());
+        }
+
+        if status.as_u16() == 429 {
+            last_error = format!("HTTP error: {} (rate limited)", status);
+            // Will retry on next iteration
+            continue;
+        }
+
+        // Non-retryable error
+        return Err(io::Error::other(format!("HTTP error: {}", status)));
     }
 
-    let bytes = response
-        .bytes()
-        .map_err(|e| io::Error::other(format!("Failed to read response: {}", e)))?;
-
-    Ok(bytes.to_vec())
+    Err(io::Error::other(format!(
+        "{} - exhausted all {} retries",
+        last_error, max_retries
+    )))
 }
 
 /// Extracts addresses for a specific state from a regional zip file.
