@@ -1,10 +1,10 @@
-use crate::cache::{self, StateCache};
+use crate::cache::{self, CachedRegion, StateCache};
 use crate::generators::addresses::Address;
 use crate::regions;
 use rand::seq::SliceRandom;
-use std::fs::File;
+use std::fs::{self, File};
 use std::io::{self, Cursor, Read, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime};
 
 /// Default limit for addresses per state
@@ -80,45 +80,47 @@ pub fn download_states(
 
     // Download each region and extract state data
     for (region_url, region_states) in regions_map {
-        // Check if we have the regional ZIP cached
-        let zip_data = if cache::is_region_cached(region_url)? {
-            if !quiet {
-                println!("Using cached region: {}", region_url);
-            }
-            cache::load_region_zip(region_url)?
-        } else {
-            if !quiet {
-                println!("Downloading region: {}", region_url);
-                println!("(This file is large and may take several minutes)");
-            }
-
-            // Download the regional zip file
-            let data = download_region(region_url, quiet)?;
-
-            // Cache the ZIP for future use
-            let zip_path = cache::save_region_zip(region_url, &data)?;
-            if !quiet {
-                println!("Cached regional ZIP to: {}", zip_path.display());
-            }
-
-            data
-        };
-
-        if !quiet {
-            println!(
-                "Processing {} bytes, extracting states: {:?}",
-                zip_data.len(),
-                region_states
-            );
-        }
+        // Check if we have the regional data cached (ZIP or directory)
+        let cached_region = cache::get_cached_region(region_url)?;
 
         // Extract and cache each state from this region
-        for state in region_states {
+        for state in region_states.clone() {
             if !quiet {
                 println!("Extracting addresses for {}...", state);
             }
 
-            let addresses = extract_state_addresses(&zip_data, &state, limit)?;
+            let addresses = match &cached_region {
+                Some(CachedRegion::Zip(zip_path)) => {
+                    if !quiet {
+                        println!("Using cached ZIP: {}", zip_path.display());
+                    }
+                    let zip_data = fs::read(zip_path)?;
+                    extract_state_from_zip(&zip_data, &state, limit)?
+                }
+                Some(CachedRegion::Directory(dir_path)) => {
+                    if !quiet {
+                        println!("Using cached directory: {}", dir_path.display());
+                    }
+                    extract_state_from_directory(dir_path, &state, limit)?
+                }
+                None => {
+                    if !quiet {
+                        println!("Downloading region: {}", region_url);
+                        println!("(This file is large and may take several minutes)");
+                    }
+
+                    // Download the regional zip file
+                    let zip_data = download_region(region_url, quiet)?;
+
+                    // Cache the ZIP for future use
+                    let zip_path = cache::save_region_zip(region_url, &zip_data)?;
+                    if !quiet {
+                        println!("Cached regional ZIP to: {}", zip_path.display());
+                    }
+
+                    extract_state_from_zip(&zip_data, &state, limit)?
+                }
+            };
 
             if !quiet {
                 println!("Found {} addresses for {}", addresses.len(), state);
@@ -165,15 +167,14 @@ pub fn print_cache_list() -> io::Result<()> {
     if cached_states.is_empty() {
         println!("No cached states found.");
         println!("\nCache location: {}", cache_dir.display());
-        println!("\nTo manually add a regional ZIP file, download from:");
+        println!("\nTo manually add regional data, download from:");
         println!("  https://data.openaddresses.io/openaddr-collected-us_south.zip");
         println!("  https://data.openaddresses.io/openaddr-collected-us_northeast.zip");
         println!("  https://data.openaddresses.io/openaddr-collected-us_midwest.zip");
         println!("  https://data.openaddresses.io/openaddr-collected-us_west.zip");
-        println!("\nThen place the ZIP file in the cache directory as:");
-        println!("  {}/us_south.zip", cache_dir.display());
-        println!("  {}/us_northeast.zip", cache_dir.display());
-        println!("  etc.");
+        println!("\nThen place in the cache directory as ZIP or extracted folder:");
+        println!("  {}/us_south.zip  OR  {}/us_south/", cache_dir.display(), cache_dir.display());
+        println!("  (If your browser auto-extracts, the folder works too!)");
         return Ok(());
     }
 
@@ -200,17 +201,20 @@ pub fn print_cache_list() -> io::Result<()> {
 
     println!("\nCache location: {}", cache_dir.display());
 
-    // Check for cached regional ZIPs
+    // Check for cached regional data (ZIPs or directories)
     let regions = ["us_south", "us_northeast", "us_midwest", "us_west"];
-    let mut cached_zips = Vec::new();
+    let mut cached_regions = Vec::new();
     for region in &regions {
         let zip_path = cache_dir.join(format!("{}.zip", region));
+        let dir_path = cache_dir.join(region);
         if zip_path.exists() {
-            cached_zips.push(*region);
+            cached_regions.push(format!("{}.zip", region));
+        } else if dir_path.exists() && dir_path.is_dir() {
+            cached_regions.push(format!("{}/ (dir)", region));
         }
     }
-    if !cached_zips.is_empty() {
-        println!("Cached regional ZIPs: {}", cached_zips.join(", "));
+    if !cached_regions.is_empty() {
+        println!("Cached regional data: {}", cached_regions.join(", "));
     }
 
     Ok(())
@@ -284,17 +288,8 @@ fn download_region(url: &str, quiet: bool) -> io::Result<Vec<u8>> {
     )))
 }
 
-/// Extracts addresses for a specific state from a regional zip file.
-///
-/// # Arguments
-/// * `zip_data` - The zip file data
-/// * `state` - The state code to extract
-/// * `limit` - Maximum number of addresses to extract
-///
-/// # Returns
-/// * `Ok(Vec<Address>)` - The extracted and shuffled addresses
-/// * `Err(io::Error)` - If extraction or parsing failed
-fn extract_state_addresses(zip_data: &[u8], state: &str, limit: usize) -> io::Result<Vec<Address>> {
+/// Extracts addresses for a specific state from a regional ZIP file.
+fn extract_state_from_zip(zip_data: &[u8], state: &str, limit: usize) -> io::Result<Vec<Address>> {
     let cursor = Cursor::new(zip_data);
     let mut archive = zip::ZipArchive::new(cursor)
         .map_err(|e| io::Error::other(format!("Invalid zip file: {}", e)))?;
@@ -324,15 +319,104 @@ fn extract_state_addresses(zip_data: &[u8], state: &str, limit: usize) -> io::Re
         }
     }
 
-    // Shuffle and truncate to limit
-    let mut rng = rand::thread_rng();
-    all_addresses.shuffle(&mut rng);
+    shuffle_and_limit(&mut all_addresses, limit);
+    Ok(all_addresses)
+}
 
-    if all_addresses.len() > limit {
-        all_addresses.truncate(limit);
+/// Extracts addresses for a specific state from an extracted regional directory.
+fn extract_state_from_directory(
+    dir_path: &Path,
+    state: &str,
+    limit: usize,
+) -> io::Result<Vec<Address>> {
+    let state_lower = state.to_lowercase();
+
+    // Look for the state directory: dir_path/us/ky/ or dir_path/openaddr-collected-us_south/us/ky/
+    let possible_paths = [
+        dir_path.join("us").join(&state_lower),
+        dir_path
+            .join(dir_path.file_name().unwrap_or_default())
+            .join("us")
+            .join(&state_lower),
+    ];
+
+    let mut state_dir: Option<PathBuf> = None;
+    for path in &possible_paths {
+        if path.exists() && path.is_dir() {
+            state_dir = Some(path.clone());
+            break;
+        }
     }
 
+    // Also try to find it recursively
+    if state_dir.is_none() {
+        state_dir = find_state_directory(dir_path, &state_lower)?;
+    }
+
+    let state_dir = state_dir.ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::NotFound,
+            format!(
+                "State directory '{}' not found in {}",
+                state_lower,
+                dir_path.display()
+            ),
+        )
+    })?;
+
+    let mut all_addresses: Vec<Address> = Vec::new();
+
+    // Read all CSV files in the state directory
+    for entry in fs::read_dir(&state_dir)? {
+        let entry = entry?;
+        let path = entry.path();
+
+        if path.is_file() && path.extension().map_or(false, |e| e == "csv") {
+            let contents = fs::read_to_string(&path)?;
+            let addresses = parse_openaddresses_csv(&contents)?;
+            all_addresses.extend(addresses);
+        }
+    }
+
+    shuffle_and_limit(&mut all_addresses, limit);
     Ok(all_addresses)
+}
+
+/// Recursively finds a state directory within a path.
+fn find_state_directory(base: &Path, state: &str) -> io::Result<Option<PathBuf>> {
+    // Look for us/<state> pattern
+    let us_dir = base.join("us");
+    if us_dir.exists() {
+        let state_dir = us_dir.join(state);
+        if state_dir.exists() && state_dir.is_dir() {
+            return Ok(Some(state_dir));
+        }
+    }
+
+    // Check subdirectories (for nested structures like openaddr-collected-us_south/us/ky)
+    if base.is_dir() {
+        for entry in fs::read_dir(base)? {
+            let entry = entry?;
+            let path = entry.path();
+            if path.is_dir() {
+                if let Some(found) = find_state_directory(&path, state)? {
+                    return Ok(Some(found));
+                }
+            }
+        }
+    }
+
+    Ok(None)
+}
+
+/// Shuffles addresses and truncates to limit.
+fn shuffle_and_limit(addresses: &mut Vec<Address>, limit: usize) {
+    let mut rng = rand::thread_rng();
+    addresses.shuffle(&mut rng);
+
+    if addresses.len() > limit {
+        addresses.truncate(limit);
+    }
 }
 
 /// Parses a CSV file in OpenAddresses format.

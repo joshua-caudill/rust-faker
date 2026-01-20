@@ -100,26 +100,55 @@ pub fn list_cached_states() -> io::Result<Vec<(String, StateCache)>> {
     Ok(states)
 }
 
-/// Returns the path to a regional ZIP file in cache
-/// The region name is extracted from the URL (e.g., "us_south" from the URL)
-pub fn get_region_zip_path(region_url: &str) -> io::Result<PathBuf> {
-    let cache_dir = get_cache_dir()?;
-
-    // Extract region name from URL (e.g., "us_south" from "openaddr-collected-us_south.zip")
-    let region_name = region_url
+/// Extracts the region name from a URL (e.g., "us_south" from the URL)
+fn extract_region_name(region_url: &str) -> String {
+    region_url
         .rsplit('/')
         .next()
         .unwrap_or("region")
         .trim_end_matches(".zip")
-        .replace("openaddr-collected-", "");
+        .replace("openaddr-collected-", "")
+}
 
+/// Returns the path to a regional ZIP file in cache
+pub fn get_region_zip_path(region_url: &str) -> io::Result<PathBuf> {
+    let cache_dir = get_cache_dir()?;
+    let region_name = extract_region_name(region_url);
     Ok(cache_dir.join(format!("{}.zip", region_name)))
 }
 
-/// Checks if a regional ZIP file is cached
+/// Returns the path to a regional directory in cache (for extracted ZIPs)
+pub fn get_region_dir_path(region_url: &str) -> io::Result<PathBuf> {
+    let cache_dir = get_cache_dir()?;
+    let region_name = extract_region_name(region_url);
+    Ok(cache_dir.join(region_name))
+}
+
+/// Enum to represent cached region format
+pub enum CachedRegion {
+    Zip(PathBuf),
+    Directory(PathBuf),
+}
+
+/// Checks if a regional data is cached (either as ZIP or directory)
+#[allow(dead_code)]
 pub fn is_region_cached(region_url: &str) -> io::Result<bool> {
+    Ok(get_cached_region(region_url)?.is_some())
+}
+
+/// Gets the cached region if it exists (ZIP takes precedence)
+pub fn get_cached_region(region_url: &str) -> io::Result<Option<CachedRegion>> {
     let zip_path = get_region_zip_path(region_url)?;
-    Ok(zip_path.exists())
+    if zip_path.exists() {
+        return Ok(Some(CachedRegion::Zip(zip_path)));
+    }
+
+    let dir_path = get_region_dir_path(region_url)?;
+    if dir_path.exists() && dir_path.is_dir() {
+        return Ok(Some(CachedRegion::Directory(dir_path)));
+    }
+
+    Ok(None)
 }
 
 /// Saves a regional ZIP file to the cache
@@ -131,6 +160,7 @@ pub fn save_region_zip(region_url: &str, data: &[u8]) -> io::Result<PathBuf> {
 }
 
 /// Loads a regional ZIP file from the cache
+#[allow(dead_code)]
 pub fn load_region_zip(region_url: &str) -> io::Result<Vec<u8>> {
     let zip_path = get_region_zip_path(region_url)?;
     fs::read(zip_path)
