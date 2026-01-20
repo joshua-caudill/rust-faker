@@ -7,7 +7,10 @@ mod generators;
 mod regions;
 mod writer;
 
-use generators::addresses::{apply_variance_to_addresses, generate_addresses, load_addresses_from_csv};
+use generators::addresses::{
+    apply_variance_to_addresses, generate_addresses, load_addresses_from_cache,
+    load_addresses_from_csv,
+};
 use generators::names::generate_names;
 use writer::CsvWriter;
 
@@ -30,6 +33,10 @@ enum Commands {
         /// Input CSV file with real addresses to load
         #[arg(short, long)]
         input: Option<String>,
+
+        /// Load from cached state(s) - comma-separated or 'all'
+        #[arg(short, long)]
+        state: Option<String>,
 
         /// Output file path
         #[arg(short, long)]
@@ -110,12 +117,19 @@ fn main() {
         Commands::Addresses {
             count,
             input,
+            state,
             output,
             error_rate,
             quiet,
         } => {
             if let Err(e) = validate_error_rate(error_rate) {
                 eprintln!("Error: {}", e);
+                process::exit(1);
+            }
+
+            // Check mutual exclusivity
+            if input.is_some() && state.is_some() {
+                eprintln!("Error: Cannot use --input and --state together. Choose one.");
                 process::exit(1);
             }
 
@@ -134,10 +148,49 @@ fn main() {
                         process::exit(1);
                     }
                 }
+            } else if let Some(state_input) = state {
+                // Load addresses from cache
+                let states_to_load: Vec<String> = if state_input.to_lowercase() == "all" {
+                    match cache::list_cached_states() {
+                        Ok(cached) => {
+                            if cached.is_empty() {
+                                eprintln!(
+                                    "Error: No states specified or cached. Run 'rust-faker download <STATE>' first."
+                                );
+                                process::exit(1);
+                            }
+                            cached.into_iter().map(|(state, _)| state).collect()
+                        }
+                        Err(e) => {
+                            eprintln!("Error listing cached states: {}", e);
+                            process::exit(1);
+                        }
+                    }
+                } else {
+                    state_input.split(',').map(|s| s.trim().to_string()).collect()
+                };
+
+                match load_addresses_from_cache(&states_to_load, count) {
+                    Ok(loaded) => {
+                        if !quiet {
+                            println!(
+                                "Loaded {} addresses from cache (states: {})",
+                                loaded.len(),
+                                states_to_load.join(", ")
+                            );
+                        }
+                        // Apply variance to loaded addresses
+                        apply_variance_to_addresses(loaded, error_rate)
+                    }
+                    Err(e) => {
+                        eprintln!("Error loading addresses from cache: {}", e);
+                        process::exit(1);
+                    }
+                }
             } else {
                 // Generate fake addresses (count is required in this case)
                 let count = count.unwrap_or_else(|| {
-                    eprintln!("Error: --count is required when not using --input");
+                    eprintln!("Error: --count is required when not using --input or --state");
                     process::exit(1);
                 });
                 if let Err(e) = validate_count(count) {
