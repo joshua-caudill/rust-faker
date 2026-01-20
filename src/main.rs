@@ -61,6 +61,32 @@ enum Commands {
         #[arg(short, long)]
         quiet: bool,
     },
+    /// Download address data from OpenAddresses.io
+    Download {
+        /// State codes to download (e.g., IL CA TX)
+        #[arg(value_name = "STATES")]
+        states: Vec<String>,
+
+        /// Download all 50 states + DC
+        #[arg(long)]
+        all: bool,
+
+        /// List cached states
+        #[arg(long)]
+        list: bool,
+
+        /// Maximum addresses per state
+        #[arg(long, default_value = "10000")]
+        limit: usize,
+
+        /// Force re-download even if cached
+        #[arg(long)]
+        force: bool,
+
+        /// Suppress progress output
+        #[arg(short, long)]
+        quiet: bool,
+    },
 }
 
 fn validate_error_rate(error_rate: f64) -> Result<(), String> {
@@ -156,6 +182,36 @@ fn main() {
 
             if !quiet {
                 println!("Successfully generated {} names to {}", count, output);
+            }
+        }
+        Commands::Download {
+            states,
+            all,
+            list,
+            limit,
+            force,
+            quiet,
+        } => {
+            if list {
+                if let Err(e) = download::print_cache_list() {
+                    eprintln!("Error listing cache: {}", e);
+                    process::exit(1);
+                }
+                return;
+            }
+
+            let states_to_download: Vec<String> = if all {
+                regions::ALL_STATES.iter().map(|s| s.to_string()).collect()
+            } else if states.is_empty() {
+                eprintln!("Error: Specify states to download or use --all");
+                process::exit(1);
+            } else {
+                states
+            };
+
+            if let Err(e) = download::download_states(&states_to_download, limit, force, quiet) {
+                eprintln!("Error downloading: {}", e);
+                process::exit(1);
             }
         }
     }
