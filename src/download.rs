@@ -5,7 +5,7 @@ use rand::seq::SliceRandom;
 use std::fs::{self, File};
 use std::io::{self, Cursor, Read, Write};
 use std::path::{Path, PathBuf};
-use std::time::{Duration, SystemTime};
+use std::time::Duration;
 
 /// Default limit for addresses per state
 #[allow(dead_code)]
@@ -574,23 +574,9 @@ fn escape_csv(field: &str) -> String {
     }
 }
 
-/// Returns the current timestamp as a string.
-///
-/// # Returns
-/// * A timestamp string in RFC3339 format
+/// Returns the current timestamp as a human-readable string.
 fn chrono_now() -> String {
-    let now = SystemTime::now();
-    let duration = now
-        .duration_since(SystemTime::UNIX_EPOCH)
-        .unwrap_or_default();
-
-    // Format as RFC3339-like timestamp
-    let secs = duration.as_secs();
-    let nanos = duration.subsec_nanos();
-
-    // Simple formatting: YYYY-MM-DDTHH:MM:SS.sssZ
-    // This is a simplified implementation
-    format!("{}.{:09}s", secs, nanos)
+    chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string()
 }
 
 #[cfg(test)]
@@ -620,9 +606,10 @@ mod tests {
     #[test]
     fn test_chrono_now_format() {
         let timestamp = chrono_now();
-        // Should contain seconds and nanoseconds
-        assert!(timestamp.contains('.'));
-        assert!(timestamp.ends_with('s'));
+        // Should be in format "YYYY-MM-DD HH:MM:SS"
+        assert_eq!(timestamp.len(), 19);
+        assert!(timestamp.contains('-'));
+        assert!(timestamp.contains(':'));
     }
 
     #[test]
