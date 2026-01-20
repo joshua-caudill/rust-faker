@@ -5,7 +5,7 @@ use rand::seq::SliceRandom;
 use std::fs::File;
 use std::io::{self, Cursor, Read, Write};
 use std::path::PathBuf;
-use std::time::SystemTime;
+use std::time::{Duration, SystemTime};
 
 /// Default limit for addresses per state
 #[allow(dead_code)]
@@ -185,14 +185,26 @@ pub fn print_cache_list() -> io::Result<()> {
 /// * `Ok(Vec<u8>)` - The downloaded zip file data
 /// * `Err(io::Error)` - If the download failed
 fn download_region(url: &str) -> io::Result<Vec<u8>> {
-    let response = reqwest::blocking::get(url)
+    // Create client with extended timeout for large files (regional zips can be 100MB+)
+    let client = reqwest::blocking::Client::builder()
+        .timeout(Duration::from_secs(600)) // 10 minute timeout
+        .connect_timeout(Duration::from_secs(30))
+        .build()
+        .map_err(|e| io::Error::other(format!("Failed to create HTTP client: {}", e)))?;
+
+    let response = client
+        .get(url)
+        .send()
         .map_err(|e| io::Error::other(format!("HTTP request failed: {}", e)))?;
 
     if !response.status().is_success() {
-        return Err(io::Error::other(format!(
-            "HTTP error: {}",
-            response.status()
-        )));
+        let status = response.status();
+        let hint = if status.as_u16() == 429 {
+            " (rate limited - please wait a few minutes before retrying)"
+        } else {
+            ""
+        };
+        return Err(io::Error::other(format!("HTTP error: {}{}", status, hint)));
     }
 
     let bytes = response
