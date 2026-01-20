@@ -295,6 +295,7 @@ fn extract_state_from_zip(zip_data: &[u8], state: &str, limit: usize) -> io::Res
         .map_err(|e| io::Error::other(format!("Invalid zip file: {}", e)))?;
 
     let state_lower = state.to_lowercase();
+    let state_upper = state.to_uppercase();
     let prefix = format!("us/{}/", state_lower);
 
     let mut all_addresses: Vec<Address> = Vec::new();
@@ -314,7 +315,13 @@ fn extract_state_from_zip(zip_data: &[u8], state: &str, limit: usize) -> io::Res
                 io::Error::other(format!("Failed to read file {}: {}", file_name, e))
             })?;
 
-            let addresses = parse_openaddresses_csv(&contents)?;
+            let mut addresses = parse_openaddresses_csv(&contents)?;
+            // Fill in state if missing (OpenAddresses data often omits it)
+            for addr in &mut addresses {
+                if addr.state.is_empty() {
+                    addr.state = state_upper.clone();
+                }
+            }
             all_addresses.extend(addresses);
         }
     }
@@ -330,6 +337,7 @@ fn extract_state_from_directory(
     limit: usize,
 ) -> io::Result<Vec<Address>> {
     let state_lower = state.to_lowercase();
+    let state_upper = state.to_uppercase();
 
     // Look for the state directory: dir_path/us/ky/ or dir_path/openaddr-collected-us_south/us/ky/
     let possible_paths = [
@@ -373,7 +381,13 @@ fn extract_state_from_directory(
 
         if path.is_file() && path.extension().map_or(false, |e| e == "csv") {
             let contents = fs::read_to_string(&path)?;
-            let addresses = parse_openaddresses_csv(&contents)?;
+            let mut addresses = parse_openaddresses_csv(&contents)?;
+            // Fill in state if missing (OpenAddresses data often omits it)
+            for addr in &mut addresses {
+                if addr.state.is_empty() {
+                    addr.state = state_upper.clone();
+                }
+            }
             all_addresses.extend(addresses);
         }
     }
