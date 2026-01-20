@@ -1,6 +1,7 @@
 use clap::{Parser, Subcommand};
 use std::process;
 
+mod cache;
 mod generators;
 mod regions;
 mod writer;
