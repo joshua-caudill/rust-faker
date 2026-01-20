@@ -2,9 +2,10 @@ use clap::{Parser, Subcommand};
 use std::process;
 
 mod generators;
+mod regions;
 mod writer;
 
-use generators::addresses::generate_addresses;
+use generators::addresses::{apply_variance_to_addresses, generate_addresses, load_addresses_from_csv};
 use generators::names::generate_names;
 use writer::CsvWriter;
 
@@ -20,15 +21,19 @@ struct Cli {
 enum Commands {
     /// Generate address records
     Addresses {
-        /// Number of records to generate
+        /// Number of records to generate (required unless using --input)
         #[arg(short, long)]
-        count: usize,
+        count: Option<usize>,
+
+        /// Input CSV file with real addresses to load
+        #[arg(short, long)]
+        input: Option<String>,
 
         /// Output file path
         #[arg(short, long)]
         output: String,
 
-        /// Error rate (0.0-1.0) - percentage of records with issues
+        /// Error rate (0.0-1.0) - percentage of records with variance applied
         #[arg(short, long, default_value = "0.5")]
         error_rate: f64,
 
@@ -56,12 +61,16 @@ enum Commands {
     },
 }
 
-fn validate_inputs(count: usize, error_rate: f64) -> Result<(), String> {
-    if count == 0 {
-        return Err("Count must be greater than 0".to_string());
-    }
+fn validate_error_rate(error_rate: f64) -> Result<(), String> {
     if !(0.0..=1.0).contains(&error_rate) {
         return Err("Error rate must be between 0.0 and 1.0".to_string());
+    }
+    Ok(())
+}
+
+fn validate_count(count: usize) -> Result<(), String> {
+    if count == 0 {
+        return Err("Count must be greater than 0".to_string());
     }
     Ok(())
 }
@@ -72,16 +81,45 @@ fn main() {
     match cli.command {
         Commands::Addresses {
             count,
+            input,
             output,
             error_rate,
             quiet,
         } => {
-            if let Err(e) = validate_inputs(count, error_rate) {
+            if let Err(e) = validate_error_rate(error_rate) {
                 eprintln!("Error: {}", e);
                 process::exit(1);
             }
 
-            let addresses = generate_addresses(count, error_rate);
+            let addresses = if let Some(input_path) = input {
+                // Load addresses from input CSV
+                match load_addresses_from_csv(&input_path, count) {
+                    Ok(loaded) => {
+                        if !quiet {
+                            println!("Loaded {} addresses from {}", loaded.len(), input_path);
+                        }
+                        // Apply variance to loaded addresses
+                        apply_variance_to_addresses(loaded, error_rate)
+                    }
+                    Err(e) => {
+                        eprintln!("Error loading addresses from {}: {}", input_path, e);
+                        process::exit(1);
+                    }
+                }
+            } else {
+                // Generate fake addresses (count is required in this case)
+                let count = count.unwrap_or_else(|| {
+                    eprintln!("Error: --count is required when not using --input");
+                    process::exit(1);
+                });
+                if let Err(e) = validate_count(count) {
+                    eprintln!("Error: {}", e);
+                    process::exit(1);
+                }
+                generate_addresses(count, error_rate)
+            };
+
+            let final_count = addresses.len();
             let writer = CsvWriter::new(quiet);
             if let Err(e) = writer.write_addresses(&output, &addresses) {
                 eprintln!("Error writing addresses: {}", e);
@@ -89,7 +127,7 @@ fn main() {
             }
 
             if !quiet {
-                println!("Successfully generated {} addresses to {}", count, output);
+                println!("Successfully wrote {} addresses to {}", final_count, output);
             }
         }
         Commands::Names {
@@ -98,7 +136,11 @@ fn main() {
             error_rate,
             quiet,
         } => {
-            if let Err(e) = validate_inputs(count, error_rate) {
+            if let Err(e) = validate_count(count) {
+                eprintln!("Error: {}", e);
+                process::exit(1);
+            }
+            if let Err(e) = validate_error_rate(error_rate) {
                 eprintln!("Error: {}", e);
                 process::exit(1);
             }
@@ -129,21 +171,22 @@ mod tests {
 
     #[test]
     fn test_validate_zero_count() {
-        assert!(validate_inputs(0, 0.5).is_err());
+        assert!(validate_count(0).is_err());
     }
 
     #[test]
     fn test_validate_error_rate_below_zero() {
-        assert!(validate_inputs(100, -0.1).is_err());
+        assert!(validate_error_rate(-0.1).is_err());
     }
 
     #[test]
     fn test_validate_error_rate_above_one() {
-        assert!(validate_inputs(100, 1.5).is_err());
+        assert!(validate_error_rate(1.5).is_err());
     }
 
     #[test]
     fn test_validate_valid_inputs() {
-        assert!(validate_inputs(100, 0.5).is_ok());
+        assert!(validate_count(100).is_ok());
+        assert!(validate_error_rate(0.5).is_ok());
     }
 }
