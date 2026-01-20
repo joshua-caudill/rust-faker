@@ -1,6 +1,11 @@
 .worktrees/
 
+# macOS
+.DS_Store
+
+# Project artifacts
+output/
+tmp/
 
 # Added by cargo
-
 /target
