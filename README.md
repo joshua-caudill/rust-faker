@@ -49,7 +49,8 @@ rust-faker addresses --count 1000 --output addresses.csv --error-rate 0.5
 ```
 
 **Options:**
-- `-c, --count <COUNT>` - Number of records to generate (required)
+- `-c, --count <COUNT>` - Number of records to generate (required unless using --input)
+- `-i, --input <INPUT>` - Input CSV file with real addresses to load (optional)
 - `-o, --output <OUTPUT>` - Output file path (required)
 - `-e, --error-rate <ERROR_RATE>` - Error rate between 0.0 and 1.0 (default: 0.5)
 - `-q, --quiet` - Suppress progress output
@@ -65,6 +66,84 @@ rust-faker addresses -c 1000 -o varied_addresses.csv -e 0.3
 # Generate 5000 addresses quietly
 rust-faker addresses -c 5000 -o addresses.csv -e 0.5 -q
 ```
+
+### Load Addresses from CSV
+
+Instead of generating fake addresses, you can load real addresses from an external CSV file and apply variance patterns to them. This is useful for testing USPS validation systems with real address data.
+
+```bash
+# Load all addresses from file, apply 50% variance
+rust-faker addresses --input real_addresses.csv -o output.csv -e 0.5
+
+# Load and sample 1000 addresses from a larger file
+rust-faker addresses --input real_addresses.csv -c 1000 -o output.csv -e 0.3
+```
+
+**Supported CSV Formats:**
+
+The tool auto-detects delimiters (comma, pipe, or tab) and maps column names case-insensitively:
+
+| Standard Name | Alternate Names Accepted |
+|---------------|--------------------------|
+| address1 | address, street, street_address |
+| address2 | unit, apt, apartment, secondary, suite |
+| city | city_name |
+| state | region, state_abbr, province |
+| zip | zipcode, zip_code, postcode, postal_code |
+
+**OpenAddresses.io Format:**
+
+For files with separate `NUMBER` and `STREET` columns (common in OpenAddresses.io exports), the tool automatically combines them:
+
+```csv
+NUMBER,STREET,CITY,REGION,POSTCODE
+123,Main St,Springfield,IL,62701
+```
+
+Becomes: `123 Main St,Springfield,IL,62701`
+
+### Download Real Addresses
+
+Download and cache real addresses from OpenAddresses.io for use in testing:
+
+```bash
+# Download addresses for specific states
+rust-faker download IL CA TX
+
+# Download all 50 states + DC
+rust-faker download --all
+
+# Check what's cached
+rust-faker download --list
+
+# Customize addresses per state (default: 10,000)
+rust-faker download IL --limit 50000
+
+# Force re-download
+rust-faker download IL --force
+```
+
+**Cache location:** `~/.rust-faker/cache/addresses/`
+
+### Use Cached Addresses
+
+Once addresses are cached, use the `--state` flag:
+
+```bash
+# Use all cached addresses from Illinois
+rust-faker addresses --state IL -o output.csv -e 0.5
+
+# Sample 1000 addresses from Illinois
+rust-faker addresses --state IL -c 1000 -o output.csv
+
+# Sample across multiple states
+rust-faker addresses --state IL,CA,TX -c 5000 -o output.csv
+
+# Sample from all cached states
+rust-faker addresses --state all -c 10000 -o output.csv
+```
+
+The `--state` flag is mutually exclusive with `--input`. When using `--state`, the `--count` flag optionally limits the sample size.
 
 ### Generate Names
 
