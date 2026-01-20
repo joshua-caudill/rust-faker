@@ -100,6 +100,42 @@ pub fn list_cached_states() -> io::Result<Vec<(String, StateCache)>> {
     Ok(states)
 }
 
+/// Returns the path to a regional ZIP file in cache
+/// The region name is extracted from the URL (e.g., "us_south" from the URL)
+pub fn get_region_zip_path(region_url: &str) -> io::Result<PathBuf> {
+    let cache_dir = get_cache_dir()?;
+
+    // Extract region name from URL (e.g., "us_south" from "openaddr-collected-us_south.zip")
+    let region_name = region_url
+        .rsplit('/')
+        .next()
+        .unwrap_or("region")
+        .trim_end_matches(".zip")
+        .replace("openaddr-collected-", "");
+
+    Ok(cache_dir.join(format!("{}.zip", region_name)))
+}
+
+/// Checks if a regional ZIP file is cached
+pub fn is_region_cached(region_url: &str) -> io::Result<bool> {
+    let zip_path = get_region_zip_path(region_url)?;
+    Ok(zip_path.exists())
+}
+
+/// Saves a regional ZIP file to the cache
+pub fn save_region_zip(region_url: &str, data: &[u8]) -> io::Result<PathBuf> {
+    ensure_cache_dir()?;
+    let zip_path = get_region_zip_path(region_url)?;
+    fs::write(&zip_path, data)?;
+    Ok(zip_path)
+}
+
+/// Loads a regional ZIP file from the cache
+pub fn load_region_zip(region_url: &str) -> io::Result<Vec<u8>> {
+    let zip_path = get_region_zip_path(region_url)?;
+    fs::read(zip_path)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

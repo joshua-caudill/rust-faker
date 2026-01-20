@@ -80,16 +80,33 @@ pub fn download_states(
 
     // Download each region and extract state data
     for (region_url, region_states) in regions_map {
-        if !quiet {
-            println!("Downloading region: {}", region_url);
-        }
+        // Check if we have the regional ZIP cached
+        let zip_data = if cache::is_region_cached(region_url)? {
+            if !quiet {
+                println!("Using cached region: {}", region_url);
+            }
+            cache::load_region_zip(region_url)?
+        } else {
+            if !quiet {
+                println!("Downloading region: {}", region_url);
+                println!("(This file is large and may take several minutes)");
+            }
 
-        // Download the regional zip file
-        let zip_data = download_region(region_url, quiet)?;
+            // Download the regional zip file
+            let data = download_region(region_url, quiet)?;
+
+            // Cache the ZIP for future use
+            let zip_path = cache::save_region_zip(region_url, &data)?;
+            if !quiet {
+                println!("Cached regional ZIP to: {}", zip_path.display());
+            }
+
+            data
+        };
 
         if !quiet {
             println!(
-                "Downloaded {} bytes, extracting states: {:?}",
+                "Processing {} bytes, extracting states: {:?}",
                 zip_data.len(),
                 region_states
             );
@@ -143,9 +160,20 @@ pub fn download_states(
 /// Prints a formatted list of cached states with their metadata.
 pub fn print_cache_list() -> io::Result<()> {
     let cached_states = cache::list_cached_states()?;
+    let cache_dir = cache::get_cache_dir()?;
 
     if cached_states.is_empty() {
         println!("No cached states found.");
+        println!("\nCache location: {}", cache_dir.display());
+        println!("\nTo manually add a regional ZIP file, download from:");
+        println!("  https://data.openaddresses.io/openaddr-collected-us_south.zip");
+        println!("  https://data.openaddresses.io/openaddr-collected-us_northeast.zip");
+        println!("  https://data.openaddresses.io/openaddr-collected-us_midwest.zip");
+        println!("  https://data.openaddresses.io/openaddr-collected-us_west.zip");
+        println!("\nThen place the ZIP file in the cache directory as:");
+        println!("  {}/us_south.zip", cache_dir.display());
+        println!("  {}/us_northeast.zip", cache_dir.display());
+        println!("  etc.");
         return Ok(());
     }
 
@@ -170,8 +198,20 @@ pub fn print_cache_list() -> io::Result<()> {
         total_records
     );
 
-    let cache_dir = cache::get_cache_dir()?;
     println!("\nCache location: {}", cache_dir.display());
+
+    // Check for cached regional ZIPs
+    let regions = ["us_south", "us_northeast", "us_midwest", "us_west"];
+    let mut cached_zips = Vec::new();
+    for region in &regions {
+        let zip_path = cache_dir.join(format!("{}.zip", region));
+        if zip_path.exists() {
+            cached_zips.push(*region);
+        }
+    }
+    if !cached_zips.is_empty() {
+        println!("Cached regional ZIPs: {}", cached_zips.join(", "));
+    }
 
     Ok(())
 }
