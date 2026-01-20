@@ -2,6 +2,7 @@ use clap::{Parser, Subcommand};
 use std::process;
 
 mod cache;
+mod download;
 mod generators;
 mod regions;
 mod writer;

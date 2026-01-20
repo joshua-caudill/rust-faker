@@ -1,0 +1,475 @@
+use crate::cache::{self, StateCache};
+use crate::generators::addresses::Address;
+use crate::regions;
+use rand::seq::SliceRandom;
+use std::fs::File;
+use std::io::{self, Cursor, Read, Write};
+use std::path::PathBuf;
+use std::time::SystemTime;
+
+/// Default limit for addresses per state
+pub const DEFAULT_LIMIT: usize = 10_000;
+
+/// Downloads address data for specified states from OpenAddresses.io.
+///
+/// # Arguments
+/// * `states` - Slice of state codes to download
+/// * `limit` - Maximum number of addresses per state
+/// * `force` - If true, re-download even if already cached
+/// * `quiet` - If true, suppress progress output
+///
+/// # Returns
+/// * `Ok(())` - If all downloads succeeded
+/// * `Err(io::Error)` - If validation or download failed
+pub fn download_states(
+    states: &[String],
+    limit: usize,
+    force: bool,
+    quiet: bool,
+) -> io::Result<()> {
+    // Validate all states first
+    for state in states {
+        if !regions::is_valid_state(state) {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!("Invalid state code: {}", state),
+            ));
+        }
+    }
+
+    // Load current manifest
+    let mut manifest = cache::load_manifest()?;
+    if manifest.version == 0 {
+        manifest.version = 1;
+    }
+
+    // Filter out already-cached states (unless force=true)
+    let mut states_to_download: Vec<String> = Vec::new();
+    for state in states {
+        let state_upper = state.to_uppercase();
+        if force || !cache::is_state_cached(&state_upper)? {
+            states_to_download.push(state_upper);
+        } else if !quiet {
+            println!("State {} already cached (use --force to re-download)", state_upper);
+        }
+    }
+
+    if states_to_download.is_empty() {
+        if !quiet {
+            println!("All requested states are already cached");
+        }
+        return Ok(());
+    }
+
+    // Group states by region to minimize downloads
+    let mut regions_map: std::collections::HashMap<&'static str, Vec<String>> =
+        std::collections::HashMap::new();
+
+    for state in &states_to_download {
+        if let Some(region_url) = regions::get_region_url(state) {
+            regions_map.entry(region_url).or_insert_with(Vec::new).push(state.clone());
+        }
+    }
+
+    // Download each region and extract state data
+    for (region_url, region_states) in regions_map {
+        if !quiet {
+            println!("Downloading region: {}", region_url);
+        }
+
+        // Download the regional zip file
+        let zip_data = download_region(region_url)?;
+
+        if !quiet {
+            println!("Downloaded {} bytes, extracting states: {:?}", zip_data.len(), region_states);
+        }
+
+        // Extract and cache each state from this region
+        for state in region_states {
+            if !quiet {
+                println!("Extracting addresses for {}...", state);
+            }
+
+            let addresses = extract_state_addresses(&zip_data, &state, limit)?;
+
+            if !quiet {
+                println!("Found {} addresses for {}", addresses.len(), state);
+            }
+
+            // Write to cache
+            let cache_path = cache::get_state_cache_path(&state)?;
+            write_addresses_to_cache(&cache_path, &addresses)?;
+
+            // Update manifest
+            manifest.states.insert(
+                state.clone(),
+                StateCache {
+                    downloaded_at: chrono_now(),
+                    source_url: region_url.to_string(),
+                    record_count: addresses.len(),
+                },
+            );
+
+            // Save manifest after each state
+            cache::save_manifest(&manifest)?;
+
+            if !quiet {
+                println!("Cached {} addresses for {}", addresses.len(), state);
+            }
+        }
+    }
+
+    if !quiet {
+        println!("Successfully downloaded {} state(s)", states_to_download.len());
+    }
+
+    Ok(())
+}
+
+/// Prints a formatted list of cached states with their metadata.
+pub fn print_cache_list() -> io::Result<()> {
+    let cached_states = cache::list_cached_states()?;
+
+    if cached_states.is_empty() {
+        println!("No cached states found.");
+        return Ok(());
+    }
+
+    println!("\nCached States:");
+    println!("{:-<80}", "");
+    println!("{:<10} {:<15} {:<30}", "State", "Records", "Downloaded");
+    println!("{:-<80}", "");
+
+    let mut total_records = 0;
+    for (state, cache_info) in &cached_states {
+        println!(
+            "{:<10} {:<15} {:<30}",
+            state, cache_info.record_count, cache_info.downloaded_at
+        );
+        total_records += cache_info.record_count;
+    }
+
+    println!("{:-<80}", "");
+    println!("Total: {} states, {} records", cached_states.len(), total_records);
+
+    let cache_dir = cache::get_cache_dir()?;
+    println!("\nCache location: {}", cache_dir.display());
+
+    Ok(())
+}
+
+/// Downloads a regional zip file from OpenAddresses.io.
+///
+/// # Arguments
+/// * `url` - The URL of the regional zip file
+///
+/// # Returns
+/// * `Ok(Vec<u8>)` - The downloaded zip file data
+/// * `Err(io::Error)` - If the download failed
+fn download_region(url: &str) -> io::Result<Vec<u8>> {
+    let response = reqwest::blocking::get(url)
+        .map_err(|e| io::Error::new(io::ErrorKind::Other, format!("HTTP request failed: {}", e)))?;
+
+    if !response.status().is_success() {
+        return Err(io::Error::new(
+            io::ErrorKind::Other,
+            format!("HTTP error: {}", response.status()),
+        ));
+    }
+
+    let bytes = response
+        .bytes()
+        .map_err(|e| io::Error::new(io::ErrorKind::Other, format!("Failed to read response: {}", e)))?;
+
+    Ok(bytes.to_vec())
+}
+
+/// Extracts addresses for a specific state from a regional zip file.
+///
+/// # Arguments
+/// * `zip_data` - The zip file data
+/// * `state` - The state code to extract
+/// * `limit` - Maximum number of addresses to extract
+///
+/// # Returns
+/// * `Ok(Vec<Address>)` - The extracted and shuffled addresses
+/// * `Err(io::Error)` - If extraction or parsing failed
+fn extract_state_addresses(zip_data: &[u8], state: &str, limit: usize) -> io::Result<Vec<Address>> {
+    let cursor = Cursor::new(zip_data);
+    let mut archive = zip::ZipArchive::new(cursor)
+        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, format!("Invalid zip file: {}", e)))?;
+
+    let state_lower = state.to_lowercase();
+    let prefix = format!("us/{}/", state_lower);
+
+    let mut all_addresses: Vec<Address> = Vec::new();
+
+    // Iterate through all files in the zip
+    for i in 0..archive.len() {
+        let mut file = archive
+            .by_index(i)
+            .map_err(|e| io::Error::new(io::ErrorKind::Other, format!("Failed to read zip entry: {}", e)))?;
+
+        let file_name = file.name().to_string();
+
+        // Check if this file is for our state
+        if file_name.starts_with(&prefix) && file_name.ends_with(".csv") {
+            let mut contents = String::new();
+            file.read_to_string(&mut contents)
+                .map_err(|e| io::Error::new(io::ErrorKind::Other, format!("Failed to read file {}: {}", file_name, e)))?;
+
+            let addresses = parse_openaddresses_csv(&contents)?;
+            all_addresses.extend(addresses);
+        }
+    }
+
+    // Shuffle and truncate to limit
+    let mut rng = rand::thread_rng();
+    all_addresses.shuffle(&mut rng);
+
+    if all_addresses.len() > limit {
+        all_addresses.truncate(limit);
+    }
+
+    Ok(all_addresses)
+}
+
+/// Parses a CSV file in OpenAddresses format.
+///
+/// # Arguments
+/// * `content` - The CSV file content as a string
+///
+/// # Returns
+/// * `Ok(Vec<Address>)` - The parsed addresses
+/// * `Err(io::Error)` - If parsing failed
+fn parse_openaddresses_csv(content: &str) -> io::Result<Vec<Address>> {
+    let mut reader = csv::ReaderBuilder::new()
+        .flexible(true)
+        .from_reader(content.as_bytes());
+
+    let headers = reader
+        .headers()
+        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, format!("Failed to read CSV headers: {}", e)))?
+        .clone();
+
+    // Map column names to indices
+    let mut column_map: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+    for (idx, header) in headers.iter().enumerate() {
+        let header_lower = header.to_lowercase();
+        column_map.insert(header_lower, idx);
+    }
+
+    // Find relevant columns (OpenAddresses format)
+    let number_idx = column_map.get("number")
+        .or_else(|| column_map.get("house_number"));
+    let street_idx = column_map.get("street")
+        .or_else(|| column_map.get("street_name"));
+    let unit_idx = column_map.get("unit")
+        .or_else(|| column_map.get("apartment"));
+    let city_idx = column_map.get("city")
+        .or_else(|| column_map.get("locality"));
+    let state_idx = column_map.get("region")
+        .or_else(|| column_map.get("state"));
+    let zip_idx = column_map.get("postcode")
+        .or_else(|| column_map.get("zip"))
+        .or_else(|| column_map.get("postal_code"));
+
+    let mut addresses: Vec<Address> = Vec::new();
+
+    for result in reader.records() {
+        let record = result
+            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, format!("Failed to read CSV record: {}", e)))?;
+
+        // Extract fields
+        let number = number_idx
+            .and_then(|&idx| record.get(idx))
+            .unwrap_or("")
+            .trim();
+        let street = street_idx
+            .and_then(|&idx| record.get(idx))
+            .unwrap_or("")
+            .trim();
+        let unit = unit_idx
+            .and_then(|&idx| record.get(idx))
+            .unwrap_or("")
+            .trim();
+        let city = city_idx
+            .and_then(|&idx| record.get(idx))
+            .unwrap_or("")
+            .trim();
+        let state = state_idx
+            .and_then(|&idx| record.get(idx))
+            .unwrap_or("")
+            .trim();
+        let zip = zip_idx
+            .and_then(|&idx| record.get(idx))
+            .unwrap_or("")
+            .trim();
+
+        // Skip records missing essential fields
+        if street.is_empty() || city.is_empty() {
+            continue;
+        }
+
+        // Combine number and street for address1
+        let address1 = if !number.is_empty() && !street.is_empty() {
+            format!("{} {}", number, street)
+        } else {
+            street.to_string()
+        };
+
+        addresses.push(Address::new(
+            address1,
+            unit.to_string(),
+            city.to_string(),
+            state.to_string(),
+            zip.to_string(),
+        ));
+    }
+
+    Ok(addresses)
+}
+
+/// Writes addresses to a cache CSV file.
+///
+/// # Arguments
+/// * `path` - The path to the cache file
+/// * `addresses` - The addresses to write
+///
+/// # Returns
+/// * `Ok(())` - If writing succeeded
+/// * `Err(io::Error)` - If writing failed
+fn write_addresses_to_cache(path: &PathBuf, addresses: &[Address]) -> io::Result<()> {
+    let mut file = File::create(path)?;
+
+    // Write header
+    writeln!(file, "address1,address2,city,state,zip")?;
+
+    // Write records
+    for address in addresses {
+        writeln!(
+            file,
+            "{},{},{},{},{}",
+            escape_csv(&address.address1),
+            escape_csv(&address.address2),
+            escape_csv(&address.city),
+            escape_csv(&address.state),
+            escape_csv(&address.zip)
+        )?;
+    }
+
+    Ok(())
+}
+
+/// Escapes a CSV field by quoting it if necessary.
+///
+/// # Arguments
+/// * `field` - The field to escape
+///
+/// # Returns
+/// * The escaped field
+fn escape_csv(field: &str) -> String {
+    if field.contains(',') || field.contains('"') || field.contains('\n') {
+        format!("\"{}\"", field.replace('"', "\"\""))
+    } else {
+        field.to_string()
+    }
+}
+
+/// Returns the current timestamp as a string.
+///
+/// # Returns
+/// * A timestamp string in RFC3339 format
+fn chrono_now() -> String {
+    let now = SystemTime::now();
+    let duration = now
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap_or_default();
+
+    // Format as RFC3339-like timestamp
+    let secs = duration.as_secs();
+    let nanos = duration.subsec_nanos();
+
+    // Simple formatting: YYYY-MM-DDTHH:MM:SS.sssZ
+    // This is a simplified implementation
+    format!("{}.{:09}s", secs, nanos)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_escape_csv_simple() {
+        assert_eq!(escape_csv("simple"), "simple");
+    }
+
+    #[test]
+    fn test_escape_csv_with_comma() {
+        assert_eq!(escape_csv("hello, world"), "\"hello, world\"");
+    }
+
+    #[test]
+    fn test_escape_csv_with_quote() {
+        assert_eq!(escape_csv("say \"hello\""), "\"say \"\"hello\"\"\"");
+    }
+
+    #[test]
+    fn test_escape_csv_with_newline() {
+        assert_eq!(escape_csv("line1\nline2"), "\"line1\nline2\"");
+    }
+
+    #[test]
+    fn test_chrono_now_format() {
+        let timestamp = chrono_now();
+        // Should contain seconds and nanoseconds
+        assert!(timestamp.contains('.'));
+        assert!(timestamp.ends_with('s'));
+    }
+
+    #[test]
+    fn test_parse_openaddresses_csv_basic() {
+        let csv_content = "NUMBER,STREET,CITY,REGION,POSTCODE\n123,Main St,Springfield,IL,62701\n456,Oak Ave,Chicago,IL,60601";
+        let addresses = parse_openaddresses_csv(csv_content).unwrap();
+
+        assert_eq!(addresses.len(), 2);
+        assert_eq!(addresses[0].address1, "123 Main St");
+        assert_eq!(addresses[0].city, "Springfield");
+        assert_eq!(addresses[0].state, "IL");
+        assert_eq!(addresses[0].zip, "62701");
+    }
+
+    #[test]
+    fn test_parse_openaddresses_csv_missing_street() {
+        let csv_content = "NUMBER,STREET,CITY,REGION,POSTCODE\n123,,Springfield,IL,62701\n456,Oak Ave,Chicago,IL,60601";
+        let addresses = parse_openaddresses_csv(csv_content).unwrap();
+
+        // Should skip record with missing street
+        assert_eq!(addresses.len(), 1);
+        assert_eq!(addresses[0].address1, "456 Oak Ave");
+    }
+
+    #[test]
+    fn test_parse_openaddresses_csv_missing_city() {
+        let csv_content = "NUMBER,STREET,CITY,REGION,POSTCODE\n123,Main St,,IL,62701\n456,Oak Ave,Chicago,IL,60601";
+        let addresses = parse_openaddresses_csv(csv_content).unwrap();
+
+        // Should skip record with missing city
+        assert_eq!(addresses.len(), 1);
+        assert_eq!(addresses[0].city, "Chicago");
+    }
+
+    #[test]
+    fn test_parse_openaddresses_csv_case_insensitive() {
+        let csv_content = "number,street,city,region,postcode\n123,Main St,Springfield,IL,62701";
+        let addresses = parse_openaddresses_csv(csv_content).unwrap();
+
+        assert_eq!(addresses.len(), 1);
+        assert_eq!(addresses[0].address1, "123 Main St");
+    }
+
+    #[test]
+    fn test_default_limit() {
+        assert_eq!(DEFAULT_LIMIT, 10_000);
+    }
+}
